@@ -430,7 +430,7 @@
       musicBtn.textContent = 'MUSIC: N/A';
     }
 
-    connectWebSocket();
+    connectEventSource();
   }
 
   function drawGrid() {
@@ -469,16 +469,18 @@
   }
 
   // Step the Construction Yard damage frame in proportion to breach count.
-  // Wiki band 14 = 33 frames from intact → rubble.
+  // Wiki band 14 = 33 frames from intact → rubble. We cap at frame 24 so the
+  // building stays visually recognizable even after a heavy swarm — the last
+  // few frames are basically just scattered debris which read as broken.
   function updateBaseDamage(breachCount) {
     if (!targetSandbox) return;
     if (state.aesthetic === 'tactical') return; // procedural base has no damage frames
     const entry = ASSETS.sprites.sandboxBase;
     if (!entry || typeof entry !== 'object' || !entry.damageFrames) return;
     if (!state.loaded.sprites.has('sandboxBase')) return;
-    const total = entry.damageFrames;
-    // ~4 frames per breach gives a 7-breach demo a full progression to rubble.
-    const idx = Math.max(0, Math.min(total - 1, breachCount * 4));
+    const MAX_FRAME = 24;
+    // 2 frames per breach: a 12-breach demo arc walks intact → ruined cleanly.
+    const idx = Math.max(0, Math.min(MAX_FRAME, breachCount * 2));
     targetSandbox.setFrame(idx);
   }
 
@@ -684,6 +686,10 @@
     }
     sceneRef.cameras.main.shake(180, 0.004);
     state.scarTints.push({ dx: x - targetSandbox.x, dy: y - targetSandbox.y, hex: cat.hex });
+    // Cap visible scars so they don't smother the damage-frame sprite.
+    // FIFO drop oldest entries when the list grows beyond the cap.
+    const SCAR_CAP = 8;
+    while (state.scarTints.length > SCAR_CAP) state.scarTints.shift();
     repaintScars();
   }
 
