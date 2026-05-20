@@ -227,6 +227,9 @@
     registeredAnims: new Set(),
     // Live entities that need to be torn down on reset.
     active: { pods: new Set(), labels: new Set(), trails: new Set() },
+    // Reset epoch — bumped on every reset(). Tweens capture the epoch at
+    // spawn time and abort their onComplete if the epoch has moved.
+    resetEpoch: 0,
   };
 
   /* -------- Phaser config -------- */
@@ -247,7 +250,9 @@
   function preload() {
     // Track what loaded vs failed so create() picks real assets when present.
     this.load.on('filecomplete', (key, type) => {
-      if (type === 'image') state.loaded.sprites.add(key);
+      // Phaser fires type='spritesheet' for load.spritesheet, type='image'
+      // for load.image. Both end up as sprite-capable textures.
+      if (type === 'image' || type === 'spritesheet') state.loaded.sprites.add(key);
       else if (type === 'audio') {
         if (key.startsWith('mus_')) state.loaded.music.add(key);
         else state.loaded.voices.add(key);
@@ -345,23 +350,44 @@
   }
 
   function registerWalkAnims() {
-    // For every loaded spritesheet, create a looping walk animation using the
-    // first N frames. Wiki sheets concatenate idle+walk+attack — capping at
-    // ~16 frames keeps the loop tight and readable.
+    // For each loaded spritesheet, register two anims:
+    //   <key>_walk — first N frames, looping (the marching cycle)
+    //   <key>_die  — last M frames, play-once (the death animation)
+    // RA2 wiki sheets typically concatenate idle/walk/attack/die in that
+    // rough order, so last-N is a reasonable first attempt for die. If a
+    // given unit's die looks wrong, per-unit dieFrames in the manifest
+    // overrides the default range.
     for (const key of Object.keys(ASSETS.sprites)) {
       if (!isSpritesheetEntry(key)) continue;
       if (!state.loaded.sprites.has(key)) continue;
       const entry = ASSETS.sprites[key];
-      const animKey = `${key}_walk`;
-      const totalFrames = sceneRef.textures.get(key).frameTotal;
-      const cap = Math.min(entry.animFrames || 16, totalFrames - 1);
+      const total = sceneRef.textures.get(key).frameTotal; // includes __BASE
+      const lastIndex = total - 2; // last real frame index
+
+      // Walk
+      const walkEnd = Math.min(entry.animFrames || 16, total - 1) - 1;
+      const walkKey = `${key}_walk`;
       sceneRef.anims.create({
-        key: animKey,
-        frames: sceneRef.anims.generateFrameNumbers(key, { start: 0, end: cap - 1 }),
+        key: walkKey,
+        frames: sceneRef.anims.generateFrameNumbers(key, { start: 0, end: walkEnd }),
         frameRate: entry.frameRate || 8,
         repeat: -1,
       });
-      state.registeredAnims.add(animKey);
+      state.registeredAnims.add(walkKey);
+
+      // Die — last N frames, play once
+      const dieN = entry.dieFrames || 12;
+      const dieStart = Math.max(walkEnd + 1, lastIndex - dieN + 1);
+      if (dieStart < lastIndex) {
+        const dieKey = `${key}_die`;
+        sceneRef.anims.create({
+          key: dieKey,
+          frames: sceneRef.anims.generateFrameNumbers(key, { start: dieStart, end: lastIndex }),
+          frameRate: Math.round((entry.frameRate || 8) * 1.2),
+          repeat: 0,
+        });
+        state.registeredAnims.add(dieKey);
+      }
     }
   }
 
@@ -540,6 +566,7 @@
 
     const tx = targetSandbox.x + Phaser.Math.Between(-50, 50);
     const ty = targetSandbox.y + Phaser.Math.Between(-50, 50);
+    const spawnEpoch = state.resetEpoch; // captured at spawn; reset bumps it
 
     sceneRef.tweens.add({
       targets: pod,
@@ -548,22 +575,43 @@
       ease: 'Quad.easeIn',
       onUpdate: () => { label.x = pod.x - label.width / 2; label.y = pod.y - 18; },
       onComplete: () => {
+        // Reset happened between spawn and impact — abort the impact entirely
+        // so reset state stays clean (no late scars, no late counter bumps).
+        if (spawnEpoch !== state.resetEpoch) return;
         state.active.trails.delete(trail); trail.destroy();
         state.active.labels.delete(label); label.destroy();
         triggerImpactFeedback(pod.x, pod.y, payload, cat);
-        // Death flash — quick scale + alpha burst, then destroy.
-        // Reads as "unit struck" before category FX takes over.
-        const startScale = pod.scaleX;
-        pod.setTint(0xffffff);
-        sceneRef.tweens.add({
-          targets: pod,
-          scaleX: startScale * 1.8,
-          scaleY: startScale * 1.8,
-          alpha: 0,
-          duration: 220,
-          ease: 'Cubic.easeOut',
-          onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
-        });
+
+        // If a sprite-frame die anim is registered for this unit, play it
+        // (real RA2 collision animation). Otherwise fall back to the
+        // procedural white-flash burst.
+        const dieKey = `${cat.sprite}_die`;
+        if (state.registeredAnims.has(dieKey)) {
+          pod.play(dieKey);
+          let cleaned = false;
+          const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
+            state.active.pods.delete(pod);
+            try { pod.destroy(); } catch {}
+          };
+          pod.once('animationcomplete', cleanup);
+          // Safety net: if for any reason animationcomplete doesn't fire
+          // (anim killed mid-play, etc.) destroy after a generous timeout.
+          setTimeout(cleanup, 1500);
+        } else {
+          const startScale = pod.scaleX;
+          pod.setTint(0xffffff);
+          sceneRef.tweens.add({
+            targets: pod,
+            scaleX: startScale * 1.8,
+            scaleY: startScale * 1.8,
+            alpha: 0,
+            duration: 220,
+            ease: 'Cubic.easeOut',
+            onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
+          });
+        }
       },
     });
   }
@@ -859,8 +907,13 @@
       music_loaded:  [...state.loaded.music],
     }),
     reset: () => {
-      // Tear down anything in flight so post-reset tweens don't repopulate the scene.
-      for (const pod of state.active.pods)   { try { pod.destroy(); } catch {} }
+      // Bump epoch first so any in-flight onComplete callbacks abort cleanly.
+      state.resetEpoch++;
+      // Kill march tweens explicitly so they can't complete and call impact logic.
+      for (const pod of state.active.pods) {
+        try { sceneRef.tweens.killTweensOf(pod); } catch {}
+        try { pod.destroy(); } catch {}
+      }
       for (const lbl of state.active.labels) { try { lbl.destroy(); } catch {} }
       for (const tr  of state.active.trails) { try { tr.destroy();  } catch {} }
       state.active.pods.clear();
