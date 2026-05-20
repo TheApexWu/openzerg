@@ -116,7 +116,7 @@
   .controls .mode-display   { color: var(--ink); font-weight: 600; min-width: 200px; }
 
   .controls .char-btn {
-    width: 44px; height: 44px; padding: 2px;
+    width: 60px; height: 60px; padding: 4px;
     background: #0f1729; border: 1px solid var(--border);
     border-radius: 4px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
@@ -127,7 +127,19 @@
     width: 100%; height: 100%;
     object-fit: contain;
     image-rendering: pixelated;
+    pointer-events: none; /* clicks bubble to button */
   }
+
+  .controls button.text-launch-btn { min-width: 56px; font-weight: 600; padding: 8px 12px; }
+  .controls button.text-launch-btn[data-category="filesystem"] { color: #f59e0b; border-color: #f59e0b; }
+  .controls button.text-launch-btn[data-category="network"]    { color: #3b82f6; border-color: #3b82f6; }
+  .controls button.text-launch-btn[data-category="privilege"]  { color: #a855f7; border-color: #a855f7; }
+  .controls button.text-launch-btn[data-category="secrets"]    { color: #14b8a6; border-color: #14b8a6; }
+  .controls button.text-launch-btn[data-category="resource"]   { color: #ec4899; border-color: #ec4899; }
+
+  /* Toggle launch UI flavour based on the SKIN aesthetic */
+  body[data-aesthetic="ra2"]      .launch-tactical { display: none; }
+  body[data-aesthetic="tactical"] .launch-ra2      { display: none; }
   .controls .char-btn[data-category="filesystem"] { border-color: rgba(245,158,11,0.4); }
   .controls .char-btn[data-category="network"]    { border-color: rgba(59,130,246,0.4); }
   .controls .char-btn[data-category="privilege"]  { border-color: rgba(168,85,247,0.4); }
@@ -203,24 +215,39 @@
       <button id="ctrl-play-replay">▶ PLAY REPLAY</button>
       <button id="ctrl-reset">⟲ RESET</button>
     </div>
-    <div class="group">
+    <div class="group launch-ra2">
       <span class="label">LAUNCH:</span>
-      <button class="char-btn" data-category="filesystem" title="Engineer — filesystem">
+      <button class="char-btn" data-category="filesystem" data-sprite="atk_filesystem" title="Engineer — filesystem">
         <img src="./assets/ra-2-sprites/engineer_thumb.png" alt="Engineer">
       </button>
-      <button class="char-btn" data-category="network" title="Spy — network">
+      <button class="char-btn" data-category="network" data-sprite="atk_network" title="Spy — network">
         <img src="./assets/ra-2-sprites/spy_thumb.png" alt="Spy">
       </button>
-      <button class="char-btn" data-category="privilege" title="Tanya — privilege escalation">
+      <button class="char-btn" data-category="privilege" data-sprite="atk_privilege" title="Tanya — privilege escalation">
         <img src="./assets/ra-2-sprites/tanya_thumb.png" alt="Tanya">
       </button>
-      <button class="char-btn" data-category="secrets" title="Psi Comando — secrets">
+      <button class="char-btn" data-category="secrets" data-sprite="atk_secrets" title="Psi Comando — secrets">
         <img src="./assets/ra-2-sprites/psi_comando_thumb.png" alt="Psi Comando">
       </button>
-      <button class="char-btn" data-category="resource" title="Terror Drone — resource exhaustion">
+      <button class="char-btn" data-category="resource" data-sprite="atk_resource" title="Terror Drone — resource exhaustion">
         <img src="./assets/ra-2-sprites/terror_drone_thumb.png" alt="Terror Drone">
       </button>
-      <button class="swarm-btn" id="ctrl-swarm">⚡ SWARM x20</button>
+      <button class="char-btn" data-category="resource" data-sprite="atk_conscript" title="Conscript — resource pressure">
+        <img src="./assets/ra-2-sprites/conscript_thumb.png" alt="Conscript">
+      </button>
+      <button class="char-btn" data-category="privilege" data-sprite="atk_gi" title="GI — privilege probe">
+        <img src="./assets/ra-2-sprites/gi_thumb.png" alt="GI">
+      </button>
+      <button class="swarm-btn" id="ctrl-swarm-ra2">⚡ SWARM x20</button>
+    </div>
+    <div class="group launch-tactical">
+      <span class="label">LAUNCH:</span>
+      <button class="text-launch-btn" data-category="filesystem">FS</button>
+      <button class="text-launch-btn" data-category="network">NET</button>
+      <button class="text-launch-btn" data-category="privilege">PRIV</button>
+      <button class="text-launch-btn" data-category="secrets">SEC</button>
+      <button class="text-launch-btn" data-category="resource">RES</button>
+      <button class="swarm-btn" id="ctrl-swarm-tactical">⚡ SWARM x20</button>
     </div>
     <div class="group">
       <span class="label">SKIN:</span>
@@ -468,6 +495,7 @@ function syncAestheticUI() {
   document.querySelectorAll('.aesthetic-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.aesthetic === currentAesthetic);
   });
+  document.body.dataset.aesthetic = currentAesthetic;
 }
 function syncAudioUI() {
   document.getElementById('ctrl-music').classList.toggle('active', currentMusic);
@@ -478,6 +506,7 @@ function setAesthetic(mode) {
   if (mode !== 'ra2' && mode !== 'tactical') return;
   currentAesthetic = mode;
   localStorage.setItem('openzerg-aesthetic', mode);
+  document.body.dataset.aesthetic = mode; // drives launch-ra2 / launch-tactical CSS toggle
   syncAestheticUI();
   postToMap({ openzerg: true, type: 'aesthetic', mode });
   appendLine('system', `aesthetic → ${mode.toUpperCase()}`);
@@ -503,20 +532,29 @@ document.querySelectorAll('.aesthetic-btn').forEach(btn => {
 document.getElementById('ctrl-music').onclick = () => setMusic(!currentMusic);
 document.getElementById('ctrl-sfx').onclick   = () => setSfx(!currentSfx);
 
-// Launch buttons — click a character thumbnail to spawn that unit as an attacker.
-// Routes through the shell's unified pipeline so kubectl + terminal + map
-// all see the event consistently (vs. the iframe's internal buttons that
-// bypassed everything).
-document.querySelectorAll('.char-btn').forEach(btn => {
-  btn.onclick = () => window.OpenZergShell.ping(btn.dataset.category);
+// Launch buttons — both the RA2 character thumbnails and the TACTICAL text
+// buttons hit the same shell pipeline via OpenZergShell.ping(). System line
+// confirms the click was received (helps when buttons feel unresponsive).
+function launchAttack(category, sprite) {
+  appendLine('system', `launch → ${category}${sprite ? ` / ${sprite.replace(/^atk_/, '')}` : ''}`);
+  if (!window.OpenZergShell) {
+    console.error('[OpenZerg] shell API not ready');
+    return;
+  }
+  window.OpenZergShell.ping(category, undefined, { sprite });
+}
+document.querySelectorAll('.char-btn, .text-launch-btn').forEach(btn => {
+  btn.onclick = () => launchAttack(btn.dataset.category, btn.dataset.sprite);
 });
-document.getElementById('ctrl-swarm').onclick = () => {
+function fireSwarm() {
   const cats = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
   for (let i = 0; i < 20; i++) {
-    setTimeout(() => window.OpenZergShell.ping(cats[i % cats.length]), i * 80);
+    setTimeout(() => launchAttack(cats[i % cats.length]), i * 80);
   }
   appendLine('system', '⚡ swarm x20 launched');
-};
+}
+document.getElementById('ctrl-swarm-ra2').onclick      = fireSwarm;
+document.getElementById('ctrl-swarm-tactical').onclick = fireSwarm;
 
 // Forward any click in the shell to the iframe as a user-gesture signal so
 // the iframe's Web Audio context can unlock for music + voice playback
@@ -657,11 +695,11 @@ window.OpenZergShell = {
   pace:   PaceQueue,
   bus:    { emit: emitEvent, on: onEvent },
   reset:  () => document.getElementById('ctrl-reset').click(),
-  ping: (category, status) => {
+  ping: (category, status, opts = {}) => {
     const pod = `attacker-${category.slice(0, 3)}-${Math.floor(Math.random() * 99).toString().padStart(2, '0')}`;
-    PaceQueue.push(normalizeEvent({ type: 'started', pod, category, vector: 'manual' }));
+    PaceQueue.push(normalizeEvent({ type: 'started', pod, category, vector: 'manual', sprite: opts.sprite }));
     setTimeout(() => PaceQueue.push(normalizeEvent({
-      type: 'result', pod, category, vector: 'manual',
+      type: 'result', pod, category, vector: 'manual', sprite: opts.sprite,
       status: status || (Math.random() < 0.35 ? 'BREACH' : 'HELD'),
       evidence: 'manual ping', duration_ms: Math.floor(200 + Math.random() * 1500),
     })), 600);

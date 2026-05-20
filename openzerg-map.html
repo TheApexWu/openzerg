@@ -176,6 +176,10 @@
                         frameWidth: 77,  frameHeight: 77,  frameRate: 10, animFrames: 16 },
       atk_secrets:    { sheet: RA2_DIR + 'psi_comando.png',
                         frameWidth: 56,  frameHeight: 70,  frameRate: 8,  animFrames: 16 },
+      atk_conscript:  { sheet: RA2_DIR + 'conscript.png',
+                        frameWidth: 76,  frameHeight: 96,  frameRate: 8,  animFrames: 16 },
+      atk_gi:         { sheet: RA2_DIR + 'gi.png',
+                        frameWidth: 78,  frameHeight: 66,  frameRate: 8,  animFrames: 16 },
     },
     voices: {
       spawn_filesystem:  './assets/audio/spawn_filesystem.mp3',
@@ -552,14 +556,18 @@
     ];
     const spawn = Phaser.Math.RND.pick(edges);
 
-    const spriteKey = pickSpriteKey(cat.sprite, 'proc_attacker');
+    // Shell/manual events can request a specific RA2 unit sprite while keeping
+    // the category/result semantics unchanged. Live backend events that don't
+    // carry sprite fall back to the category's default unit.
+    const spriteId = (payload.sprite && ASSETS.sprites[payload.sprite]) ? payload.sprite : cat.sprite;
+    const spriteKey = pickSpriteKey(spriteId, 'proc_attacker');
     const usingProc = (spriteKey === 'proc_attacker');
     const pod = sceneRef.physics.add.sprite(spawn.x, spawn.y, spriteKey).setDepth(3);
     if (usingProc) {
       pod.setTint(cat.hex);
     } else {
       // For spritesheets, scale to frame footprint (not full sheet width).
-      const entry = ASSETS.sprites[cat.sprite];
+      const entry = ASSETS.sprites[spriteId];
       let frameW, frameH;
       if (entry && typeof entry === 'object') {
         frameW = entry.frameWidth; frameH = entry.frameHeight;
@@ -570,7 +578,7 @@
       const desired = 44; // bigger than procedural diamond — RA2 infantry reads small
       pod.setScale(desired / Math.max(frameW, frameH));
       // Play walking animation if a spritesheet anim is registered for this unit.
-      const animKey = `${cat.sprite}_walk`;
+      const animKey = `${spriteId}_walk`;
       if (state.registeredAnims.has(animKey)) pod.play(animKey);
     }
     state.active.pods.add(pod);
@@ -603,45 +611,33 @@
       x: tx, y: ty,
       duration: Phaser.Math.Between(1400, 2200),
       ease: 'Quad.easeIn',
-      onUpdate: () => { label.x = pod.x - label.width / 2; label.y = pod.y - 18; },
+      onUpdate: () => {
+        if (label) { label.x = pod.x - label.width / 2; label.y = pod.y - 18; }
+      },
       onComplete: () => {
         // Reset happened between spawn and impact — abort the impact entirely
         // so reset state stays clean (no late scars, no late counter bumps).
         if (spawnEpoch !== state.resetEpoch) return;
-        state.active.trails.delete(trail); trail.destroy();
-        state.active.labels.delete(label); label.destroy();
+        if (trail) { state.active.trails.delete(trail); trail.destroy(); }
+        if (label) { state.active.labels.delete(label); label.destroy(); }
         triggerImpactFeedback(pod.x, pod.y, payload, cat);
 
-        // If a sprite-frame die anim is registered for this unit, play it
-        // (real RA2 collision animation). Otherwise fall back to the
-        // procedural white-flash burst.
-        const dieKey = `${cat.sprite}_die`;
-        if (state.registeredAnims.has(dieKey)) {
-          pod.play(dieKey);
-          let cleaned = false;
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
-            state.active.pods.delete(pod);
-            try { pod.destroy(); } catch {}
-          };
-          pod.once('animationcomplete', cleanup);
-          // Safety net: if for any reason animationcomplete doesn't fire
-          // (anim killed mid-play, etc.) destroy after a generous timeout.
-          setTimeout(cleanup, 1500);
-        } else {
-          const startScale = pod.scaleX;
-          pod.setTint(0xffffff);
-          sceneRef.tweens.add({
-            targets: pod,
-            scaleX: startScale * 1.8,
-            scaleY: startScale * 1.8,
-            alpha: 0,
-            duration: 220,
-            ease: 'Cubic.easeOut',
-            onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
-          });
-        }
+        // Impact cleanup. The raw RA2 sheets don't expose reliable per-unit
+        // death-frame ranges here; using the tail frames caused some units to
+        // appear to crawl after impact. Keep the walk animation for approach,
+        // then use a crisp white-flash burst on collision.
+        try { pod.anims.stop(); } catch {}
+        const startScale = pod.scaleX;
+        pod.setTint(0xffffff);
+        sceneRef.tweens.add({
+          targets: pod,
+          scaleX: startScale * 1.8,
+          scaleY: startScale * 1.8,
+          alpha: 0,
+          duration: 220,
+          ease: 'Cubic.easeOut',
+          onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
+        });
       },
     });
   }
