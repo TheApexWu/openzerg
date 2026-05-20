@@ -455,6 +455,14 @@ document.querySelectorAll('.aesthetic-btn').forEach(btn => {
 document.getElementById('ctrl-music').onclick = () => setMusic(!currentMusic);
 document.getElementById('ctrl-sfx').onclick   = () => setSfx(!currentSfx);
 
+// Forward any click in the shell to the iframe as a user-gesture signal so
+// the iframe's Web Audio context can unlock for music + voice playback
+// (autoplay policy blocks audio that originates from cross-document
+// postMessage without a same-document user gesture).
+document.addEventListener('click', () => {
+  postToMap({ openzerg: true, type: 'audioGesture' });
+});
+
 syncAestheticUI(); syncAudioUI();
 
 /* ---------- Subscriber: terminal pane ---------- */

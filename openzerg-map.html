@@ -217,6 +217,8 @@
     audio: { musicEnabled: true, sfxEnabled: true },
     // Set of anim keys registered for spritesheet sprites (e.g. 'atk_filesystem_walk')
     registeredAnims: new Set(),
+    // Live entities that need to be torn down on reset.
+    active: { pods: new Set(), labels: new Set(), trails: new Set() },
   };
 
   /* -------- Phaser config -------- */
@@ -411,6 +413,7 @@
         if (data.type === 'aesthetic'){ setAesthetic(data.mode);   return; }
         if (data.type === 'music')    { setMusicEnabled(!!data.enabled); return; }
         if (data.type === 'sfx')      { setSfxEnabled(!!data.enabled);   return; }
+        if (data.type === 'audioGesture') { tryUnlockAudio(); return; }
         if (data.event) handleCanonicalEvent(data.event);
       });
       // Announce ready so shell can flush any queued events.
@@ -466,16 +469,19 @@
       const desired = 28;
       pod.setScale(desired / Math.max(src.width, src.height));
     }
+    state.active.pods.add(pod);
 
     const label = sceneRef.add.text(spawn.x, spawn.y - 16,
       `[${cat.short}] ${payload.vector || '???'}`,
       { font: '10px monospace', color: cat.css, backgroundColor: '#000000bb',
         padding: { x: 4, y: 2 } }).setDepth(4);
+    state.active.labels.add(label);
 
     const trail = sceneRef.add.particles(0, 0, 'spark', {
       follow: pod, lifespan: 350, speed: 0, quantity: 1,
       scale: { start: 0.6, end: 0 }, tint: cat.hex, blendMode: 'ADD', frequency: 30,
     }).setDepth(2);
+    state.active.trails.add(trail);
 
     playVoice(cat.voice);
 
@@ -489,7 +495,8 @@
       ease: 'Quad.easeIn',
       onUpdate: () => { label.x = pod.x - label.width / 2; label.y = pod.y - 18; },
       onComplete: () => {
-        trail.destroy(); label.destroy();
+        state.active.trails.delete(trail); trail.destroy();
+        state.active.labels.delete(label); label.destroy();
         triggerImpactFeedback(pod.x, pod.y, payload, cat);
         // Death flash — quick scale + alpha burst, then destroy.
         // Reads as "unit struck" before category FX takes over.
@@ -502,7 +509,7 @@
           alpha: 0,
           duration: 220,
           ease: 'Cubic.easeOut',
-          onComplete: () => pod.destroy(),
+          onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
         });
       },
     });
@@ -692,9 +699,25 @@
 
   function setMusicEnabled(enabled) {
     state.audio.musicEnabled = !!enabled;
-    if (!enabled && state.music.playing) stopMusic();
+    if (enabled) {
+      tryUnlockAudio();
+      if (!state.music.playing && state.loaded.music.size > 0) {
+        startMusic(state.music.idx || 0);
+      }
+    } else if (state.music.playing) {
+      stopMusic();
+    }
     const btn = document.getElementById('oz-music');
     if (btn) btn.disabled = !enabled;
+  }
+
+  function tryUnlockAudio() {
+    // Browser autoplay policy: audio context may be suspended in an iframe
+    // even after a parent-window user gesture. Best-effort resume here.
+    if (sceneRef && sceneRef.sound && sceneRef.sound.context
+        && sceneRef.sound.context.state === 'suspended') {
+      sceneRef.sound.context.resume().catch(() => {});
+    }
   }
 
   function setSfxEnabled(enabled) {
@@ -783,9 +806,20 @@
       music_loaded:  [...state.loaded.music],
     }),
     reset: () => {
+      // Tear down anything in flight so post-reset tweens don't repopulate the scene.
+      for (const pod of state.active.pods)   { try { pod.destroy(); } catch {} }
+      for (const lbl of state.active.labels) { try { lbl.destroy(); } catch {} }
+      for (const tr  of state.active.trails) { try { tr.destroy();  } catch {} }
+      state.active.pods.clear();
+      state.active.labels.clear();
+      state.active.trails.clear();
+      // Stop music so a reset feels like a hard restart.
+      if (state.music.playing) stopMusic();
       state.counters = { total: 0, held: 0, breach: 0 };
       state.scarTints = [];
-      ['oz-c-total','oz-c-held','oz-c-breach'].forEach(id => document.getElementById(id).textContent = 0);
+      ['oz-c-total','oz-c-held','oz-c-breach'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = 0;
+      });
       targetSandbox && targetSandbox.clearTint();
       repaintScars();
     },
