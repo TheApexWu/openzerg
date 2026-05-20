@@ -1,0 +1,22 @@
+# Ripped RA2 sprites / voices / soundtrack — DO NOT COMMIT (gray-zone IP).
+# Each developer sources their own copy locally for demo machines.
+assets/
+
+# Conversation transcript scratch from prep session — not source.
+Untitled
+
+# Local node / build artifacts (if added later)
+node_modules/
+dist/
+.cache/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*

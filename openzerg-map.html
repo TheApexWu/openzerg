@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OpenZerg — Containment Map</title>
+
+<!--
+  ============================================================
+  ASSET MANIFEST — drop files into ./assets/{sprites,audio,music}
+  Anything missing falls back gracefully to a procedural sprite
+  or silent audio. Demo still runs even if you have zero assets.
+  ============================================================
+
+  ./assets/sprites/
+    battle_lab.png         Sandbox base (Allied or Soviet Battle Lab, ~160×160)
+    engineer.png           Attacker: filesystem  (~24×24 or larger)
+    spy.png                Attacker: network
+    tanya.png              Attacker: privilege
+    terror_drone.png       Attacker: resource
+    yuri.png               Attacker: secrets
+
+  ./assets/audio/   (mp3 or ogg, short clips < 2s)
+    spawn_filesystem.mp3   "Engineer reporting"
+    spawn_network.mp3      "Indeed" / spy ack
+    spawn_privilege.mp3    "Shake it baby"
+    spawn_resource.mp3     Terror drone chitter / "Conscript reporting"
+    spawn_secrets.mp3      "How do you do?"
+    impact_held.mp3        Allied Battle Lab "Operating"
+    impact_breach.mp3      EVA "We are under attack" / "Mission failed"
+
+  ./assets/music/   (Klepacki tracks, mp3)
+    hellmarch2.mp3         Default starting track
+    industrofunk.mp3
+    burn.mp3
+    power.mp3
+    grinder.mp3
+    trance.mp3
+
+  Sourcing:
+    - XCC Mixer on owned RA2 install → extract sprites from ra2.mix, voices from
+      audio.mix / voxa.mix, music from theme.mix (or .wav files in install dir)
+    - Community packs: CnCNet, Project Perfect Mod, ModDB
+    - DO NOT commit ./assets/ to a public repo — gray-zone IP
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+<style>
+  :root {
+    --bg: #030712;
+    --grid: #0b1220;
+    --ink: #e5e7eb;
+    --dim: #6b7280;
+    --accent: #38bdf8;
+    --hold: #4ade80;
+    --breach: #ef4444;
+    --fs: #f59e0b;
+    --net: #3b82f6;
+    --priv: #a855f7;
+    --res: #ec4899;
+    --sec: #14b8a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+               font-family: 'JetBrains Mono', 'Courier New', monospace; overflow: hidden; }
+
+  #openzerg-root { position: relative; width: 100%; height: 100%; min-width: 320px; min-height: 240px; }
+  #openzerg-canvas { position: absolute; inset: 0; }
+  #openzerg-canvas canvas { display: block; }
+
+  #openzerg-hud { position: absolute; top: 14px; left: 18px; z-index: 10;
+                  pointer-events: none; user-select: none; }
+  #openzerg-hud h2 { margin: 0; font-size: 18px; letter-spacing: 2px; color: var(--accent); }
+  .hud-stat { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .hud-stat b { color: var(--hold); }
+  .hud-stat .track { color: var(--accent); }
+
+  #openzerg-counters {
+    position: absolute; top: 14px; right: 18px; z-index: 10;
+    display: flex; gap: 14px; font-size: 11px; pointer-events: none;
+  }
+  #openzerg-counters .c { display: flex; flex-direction: column; align-items: flex-end; }
+  #openzerg-counters .v { font-size: 18px; font-weight: 700; }
+  #openzerg-counters .l { color: var(--dim); letter-spacing: 1px; }
+  .c.held .v   { color: var(--hold); }
+  .c.breach .v { color: var(--breach); }
+  .c.total .v  { color: var(--accent); }
+
+  #openzerg-controls {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 6px; padding: 8px 10px; flex-wrap: wrap; justify-content: center;
+    background: #0b1220cc; border: 1px solid #1f2937;
+    border-radius: 8px; backdrop-filter: blur(4px); max-width: calc(100% - 24px);
+  }
+  #openzerg-controls button {
+    background: transparent; color: var(--ink);
+    border: 1px solid #1f2937; border-radius: 5px;
+    padding: 6px 10px; font-family: inherit; font-size: 11px;
+    letter-spacing: 1px; cursor: pointer; transition: all 0.12s;
+  }
+  #openzerg-controls button:hover { transform: translateY(-1px); }
+  #openzerg-controls button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  #openzerg-controls .fs   { color: var(--fs);   border-color: var(--fs); }
+  #openzerg-controls .net  { color: var(--net);  border-color: var(--net); }
+  #openzerg-controls .priv { color: var(--priv); border-color: var(--priv); }
+  #openzerg-controls .res  { color: var(--res);  border-color: var(--res); }
+  #openzerg-controls .sec  { color: var(--sec);  border-color: var(--sec); }
+  #openzerg-controls .toggle { color: var(--dim); border-color: #1f2937; min-width: 76px; }
+  #openzerg-controls .toggle[data-mode="BREACH"] { color: var(--breach); border-color: var(--breach); }
+  #openzerg-controls .toggle[data-mode="HELD"]   { color: var(--hold);   border-color: var(--hold); }
+  #openzerg-controls .toggle[data-mode="MIX"]    { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .swarm  { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .music  { color: var(--accent); border-color: var(--accent); min-width: 90px; }
+  #openzerg-controls .music.on { background: var(--accent); color: #030712; }
+  #openzerg-controls .next   { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .sep { width: 1px; background: #1f2937; margin: 0 4px; align-self: stretch; }
+</style>
+</head>
+<body>
+<div id="openzerg-root">
+  <div id="openzerg-canvas"></div>
+
+  <div id="openzerg-hud">
+    <h2>OPENZERG // CONTAINMENT MAP</h2>
+    <div class="hud-stat">CLUSTER: <b>kind-openzerg</b> &nbsp; WS: <b id="oz-ws">offline</b></div>
+    <div class="hud-stat">TRACK: <span class="track" id="oz-track">— silent —</span></div>
+  </div>
+
+  <div id="openzerg-counters">
+    <div class="c total"><div class="v" id="oz-c-total">0</div><div class="l">PROBES</div></div>
+    <div class="c held"><div class="v" id="oz-c-held">0</div><div class="l">HELD</div></div>
+    <div class="c breach"><div class="v" id="oz-c-breach">0</div><div class="l">BREACH</div></div>
+  </div>
+
+  <div id="openzerg-controls">
+    <button class="fs"   onclick="OpenZerg.ping('filesystem')">FS</button>
+    <button class="net"  onclick="OpenZerg.ping('network')">NET</button>
+    <button class="priv" onclick="OpenZerg.ping('privilege')">PRIV</button>
+    <button class="sec"  onclick="OpenZerg.ping('secrets')">SEC</button>
+    <button class="res"  onclick="OpenZerg.ping('resource')">RES</button>
+    <button class="swarm" onclick="OpenZerg.swarm(20)">SWARM x20</button>
+    <button class="toggle" data-mode="MIX" id="oz-mode" onclick="OpenZerg.cycleMode()">MODE: MIX</button>
+    <div class="sep"></div>
+    <button class="music" id="oz-music" onclick="OpenZerg.toggleMusic()">MUSIC: OFF</button>
+    <button class="next"  id="oz-next"  onclick="OpenZerg.nextTrack()">NEXT ▸</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   OpenZerg — Containment Map
+   Phaser 3 scene + RA2 sprite/voice/soundtrack loader.
+   Falls back to procedural graphics if any asset is missing,
+   so the demo runs even with zero asset files present.
+   ============================================================ */
+(() => {
+  const ROOT = document.getElementById('openzerg-root');
+  const HOST = document.getElementById('openzerg-canvas');
+
+  /* -------- Asset manifest -------- */
+  const ASSETS = {
+    sprites: {
+      sandboxBase:       './assets/sprites/battle_lab.png',
+      atk_filesystem:    './assets/sprites/engineer.png',
+      atk_network:       './assets/sprites/spy.png',
+      atk_privilege:     './assets/sprites/tanya.png',
+      atk_resource:      './assets/sprites/terror_drone.png',
+      atk_secrets:       './assets/sprites/yuri.png',
+    },
+    voices: {
+      spawn_filesystem:  './assets/audio/spawn_filesystem.mp3',
+      spawn_network:     './assets/audio/spawn_network.mp3',
+      spawn_privilege:   './assets/audio/spawn_privilege.mp3',
+      spawn_resource:    './assets/audio/spawn_resource.mp3',
+      spawn_secrets:     './assets/audio/spawn_secrets.mp3',
+      impact_held:       './assets/audio/impact_held.mp3',
+      impact_breach:     './assets/audio/impact_breach.mp3',
+    },
+    music: [
+      { name: 'Hell March 2', key: 'mus_hellmarch2', file: './assets/music/hellmarch2.mp3' },
+      { name: 'Industrofunk', key: 'mus_industrofunk', file: './assets/music/industrofunk.mp3' },
+      { name: 'Burn',         key: 'mus_burn',         file: './assets/music/burn.mp3' },
+      { name: 'Power',        key: 'mus_power',        file: './assets/music/power.mp3' },
+      { name: 'Grinder',      key: 'mus_grinder',      file: './assets/music/grinder.mp3' },
+      { name: 'Trance',       key: 'mus_trance',       file: './assets/music/trance.mp3' },
+    ],
+  };
+
+  /* -------- Category metadata -------- */
+  const CATEGORY = {
+    filesystem: { hex: 0xf59e0b, css: '#f59e0b', short: 'fs',   sprite: 'atk_filesystem', voice: 'spawn_filesystem' },
+    network:    { hex: 0x3b82f6, css: '#3b82f6', short: 'net',  sprite: 'atk_network',    voice: 'spawn_network' },
+    privilege:  { hex: 0xa855f7, css: '#a855f7', short: 'priv', sprite: 'atk_privilege',  voice: 'spawn_privilege' },
+    resource:   { hex: 0xec4899, css: '#ec4899', short: 'res',  sprite: 'atk_resource',   voice: 'spawn_resource' },
+    secrets:    { hex: 0x14b8a6, css: '#14b8a6', short: 'sec',  sprite: 'atk_secrets',    voice: 'spawn_secrets' },
+    unknown:    { hex: 0xffffff, css: '#ffffff', short: '???',  sprite: 'atk_filesystem', voice: null },
+  };
+
+  const VECTOR_LIBRARY = {
+    filesystem: ['fs_symlink', 'fs_proc_root', 'fs_etc_shadow', 'fs_mount_host'],
+    network:    ['net_egress', 'net_k8s_api', 'net_pod_to_pod', 'net_dns_exfil'],
+    privilege:  ['priv_root_check', 'priv_docker_sock', 'priv_nsenter', 'priv_caps'],
+    resource:   ['res_fork_bomb', 'res_mem_bomb', 'res_disk_fill', 'res_pid_max'],
+    secrets:    ['sec_sa_token', 'sec_envvar_scan', 'sec_var_run_secrets'],
+  };
+
+  /* -------- State -------- */
+  const state = {
+    counters: { total: 0, held: 0, breach: 0 },
+    mode: 'MIX',
+    scarTints: [],
+    loaded: { sprites: new Set(), voices: new Set(), music: new Set() },
+    voiceCooldownUntil: 0, // throttle so swarms don't overlap audio
+    music: { idx: 0, playing: false, current: null },
+  };
+
+  /* -------- Phaser config -------- */
+  const config = {
+    type: Phaser.AUTO,
+    parent: HOST,
+    transparent: true,
+    scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%',
+             autoCenter: Phaser.Scale.CENTER_BOTH },
+    physics: { default: 'arcade' },
+    scene: { preload, create },
+  };
+
+  let sceneRef, targetSandbox, baseGlow, gridLayer, scarFx;
+  const game = new Phaser.Game(config);
+
+  /* -------- Preload: sprites + audio with graceful fallback -------- */
+  function preload() {
+    // Track what loaded vs failed so create() picks real assets when present.
+    this.load.on('filecomplete', (key, type) => {
+      if (type === 'image') state.loaded.sprites.add(key);
+      else if (type === 'audio') {
+        if (key.startsWith('mus_')) state.loaded.music.add(key);
+        else state.loaded.voices.add(key);
+      }
+    });
+    this.load.on('loaderror', (file) => {
+      console.debug('[OpenZerg] missing asset, falling back:', file.key, file.src);
+    });
+
+    // Sprites
+    for (const [key, url] of Object.entries(ASSETS.sprites)) this.load.image(key, url);
+    // Voices
+    for (const [key, url] of Object.entries(ASSETS.voices)) this.load.audio(key, url);
+    // Music
+    for (const m of ASSETS.music) this.load.audio(m.key, m.file);
+
+    // Always build procedural fallback textures under reserved keys.
+    buildProceduralTextures(this);
+  }
+
+  function buildProceduralTextures(scene) {
+    const g = scene.make.graphics({ add: false });
+
+    // Procedural sandbox base
+    g.clear();
+    g.fillStyle(0x0f172a, 1).fillRect(0, 0, 160, 160);
+    g.lineStyle(2, 0x38bdf8, 1).strokeRect(0, 0, 160, 160);
+    g.lineStyle(1, 0x1e40af, 0.6).strokeRect(10, 10, 140, 140);
+    g.fillStyle(0x38bdf8, 0.18).fillRect(70, 70, 20, 20);
+    g.generateTexture('proc_sandboxBase', 160, 160);
+
+    // Procedural attacker diamond
+    g.clear();
+    g.fillStyle(0xffffff, 1);
+    g.beginPath(); g.moveTo(8, 0); g.lineTo(16, 8); g.lineTo(8, 16); g.lineTo(0, 8); g.closePath();
+    g.fillPath();
+    g.generateTexture('proc_attacker', 16, 16);
+
+    // Spark
+    g.clear();
+    g.fillStyle(0xffffff, 1).fillCircle(3, 3, 3);
+    g.generateTexture('spark', 6, 6);
+  }
+
+  function pickSpriteKey(realKey, fallbackKey) {
+    return state.loaded.sprites.has(realKey) ? realKey : fallbackKey;
+  }
+
+  /* -------- Scene boot -------- */
+  function create() {
+    sceneRef = this;
+    drawGrid();
+    placeBase();
+
+    this.scale.on('resize', (size) => {
+      if (!targetSandbox) return;
+      targetSandbox.setPosition(size.width / 2, size.height / 2);
+      baseGlow.setPosition(size.width / 2, size.height / 2);
+      drawGrid();
+      repaintScars();
+    });
+
+    // Disable music UI if no tracks loaded.
+    const musicBtn = document.getElementById('oz-music');
+    const nextBtn  = document.getElementById('oz-next');
+    if (state.loaded.music.size === 0) {
+      musicBtn.disabled = true; nextBtn.disabled = true;
+      musicBtn.textContent = 'MUSIC: N/A';
+    }
+
+    connectWebSocket();
+  }
+
+  function drawGrid() {
+    if (gridLayer) gridLayer.destroy();
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    gridLayer = sceneRef.add.graphics().setDepth(-10);
+    gridLayer.lineStyle(1, 0x0b1220, 1);
+    const step = 40;
+    for (let x = 0; x < w; x += step) gridLayer.lineBetween(x, 0, x, h);
+    for (let y = 0; y < h; y += step) gridLayer.lineBetween(0, y, w, y);
+  }
+
+  function placeBase() {
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    baseGlow = sceneRef.add.circle(w / 2, h / 2, 110, 0x38bdf8, 0.05).setDepth(-1);
+    sceneRef.tweens.add({ targets: baseGlow, scale: 1.08, alpha: 0.12,
+                          duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+    targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
+    // If using procedural, leave as-is. If using RA2 art, scale to a reasonable footprint.
+    if (baseKey === 'sandboxBase') {
+      const desired = 160;
+      const src = sceneRef.textures.get(baseKey).getSourceImage();
+      const scale = desired / Math.max(src.width, src.height);
+      targetSandbox.setScale(scale);
+    }
+    scarFx = sceneRef.add.graphics().setDepth(2);
+  }
+
+  /* -------- WebSocket -------- */
+  function connectWebSocket() {
+    const wsLabel = document.getElementById('oz-ws');
+    let socket;
+    try { socket = new WebSocket('ws://localhost:8000/ws'); }
+    catch { wsLabel.textContent = 'offline'; return; }
+
+    socket.onopen    = () => { wsLabel.textContent = 'live'; wsLabel.style.color = 'var(--hold)'; };
+    socket.onclose   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
+    socket.onerror   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
+    socket.onmessage = (ev) => {
+      try { processIncomingAttack(JSON.parse(ev.data)); } catch (e) { console.error('OpenZerg parse', e); }
+    };
+  }
+
+  /* -------- Attack lifecycle -------- */
+  function processIncomingAttack(payload) {
+    if (!sceneRef || !targetSandbox) return;
+    const cat = CATEGORY[payload.category] || CATEGORY.unknown;
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+
+    const edges = [
+      { x: Phaser.Math.Between(0, w), y: -30 },
+      { x: Phaser.Math.Between(0, w), y: h + 30 },
+      { x: -30, y: Phaser.Math.Between(0, h) },
+      { x: w + 30, y: Phaser.Math.Between(0, h) },
+    ];
+    const spawn = Phaser.Math.RND.pick(edges);
+
+    const spriteKey = pickSpriteKey(cat.sprite, 'proc_attacker');
+    const usingProc = (spriteKey === 'proc_attacker');
+    const pod = sceneRef.physics.add.sprite(spawn.x, spawn.y, spriteKey).setDepth(3);
+    if (usingProc) {
+      pod.setTint(cat.hex);
+    } else {
+      // Normalize unknown source size to a readable footprint.
+      const src = sceneRef.textures.get(spriteKey).getSourceImage();
+      const desired = 28;
+      pod.setScale(desired / Math.max(src.width, src.height));
+    }
+
+    const label = sceneRef.add.text(spawn.x, spawn.y - 16,
+      `[${cat.short}] ${payload.vector || '???'}`,
+      { font: '10px monospace', color: cat.css, backgroundColor: '#000000bb',
+        padding: { x: 4, y: 2 } }).setDepth(4);
+
+    const trail = sceneRef.add.particles(0, 0, 'spark', {
+      follow: pod, lifespan: 350, speed: 0, quantity: 1,
+      scale: { start: 0.6, end: 0 }, tint: cat.hex, blendMode: 'ADD', frequency: 30,
+    }).setDepth(2);
+
+    playVoice(cat.voice);
+
+    const tx = targetSandbox.x + Phaser.Math.Between(-50, 50);
+    const ty = targetSandbox.y + Phaser.Math.Between(-50, 50);
+
+    sceneRef.tweens.add({
+      targets: pod,
+      x: tx, y: ty,
+      duration: Phaser.Math.Between(1400, 2200),
+      ease: 'Quad.easeIn',
+      onUpdate: () => { label.x = pod.x - label.width / 2; label.y = pod.y - 18; },
+      onComplete: () => {
+        trail.destroy(); label.destroy();
+        triggerImpactFeedback(pod.x, pod.y, payload, cat);
+        pod.destroy();
+      },
+    });
+  }
+
+  /* -------- Impact: per-category FX + status FX + voice -------- */
+  function triggerImpactFeedback(x, y, data, cat) {
+    bumpCounters(data.status);
+
+    if (data.status === 'BREACH') {
+      breachCommon(x, y, cat);
+      playVoice('impact_breach');
+    } else {
+      heldCommon(x, y);
+      playVoice('impact_held');
+    }
+
+    switch (data.category) {
+      case 'resource':   fxForkBomb(x, y, cat, data.status); break;
+      case 'network':    fxLightning(x, y, cat, data.status); break;
+      case 'filesystem': fxFilesystem(x, y, cat, data.status); break;
+      case 'privilege':  fxPrivilege(x, y, cat, data.status); break;
+      case 'secrets':    fxSecrets(x, y, cat, data.status); break;
+    }
+  }
+
+  function heldCommon(x, y) {
+    const shield = sceneRef.add.circle(x, y, 18).setStrokeStyle(2, 0x22c55e).setDepth(5);
+    sceneRef.tweens.add({ targets: shield, scale: 2.2, alpha: 0, duration: 420,
+                          ease: 'Cubic.easeOut', onComplete: () => shield.destroy() });
+    const ping = sceneRef.add.circle(x, y, 4, 0x22c55e, 0.8).setDepth(5);
+    sceneRef.tweens.add({ targets: ping, scale: 5, alpha: 0, duration: 600,
+                          onComplete: () => ping.destroy() });
+  }
+
+  function breachCommon(x, y, cat) {
+    const flash = sceneRef.add.circle(x, y, 10, 0xef4444).setDepth(5);
+    sceneRef.tweens.add({ targets: flash, scale: 10, alpha: 0, duration: 500,
+                          onComplete: () => flash.destroy() });
+    targetSandbox.setTint(0xef4444);
+    sceneRef.cameras.main.shake(180, 0.004);
+    state.scarTints.push({ dx: x - targetSandbox.x, dy: y - targetSandbox.y, hex: cat.hex });
+    repaintScars();
+  }
+
+  function repaintScars() {
+    if (!scarFx) return;
+    scarFx.clear();
+    for (const s of state.scarTints) {
+      const cx = targetSandbox.x + s.dx, cy = targetSandbox.y + s.dy;
+      scarFx.lineStyle(2, 0xef4444, 0.9);
+      for (let i = 0; i < 4; i++) {
+        const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        scarFx.lineBetween(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4,
+                           cx + Math.cos(a) * 14, cy + Math.sin(a) * 14);
+      }
+      scarFx.fillStyle(s.hex, 0.6).fillCircle(cx, cy, 2);
+    }
+  }
+
+  /* -------- Category-specific FX (unchanged from v1) -------- */
+  function fxForkBomb(x, y, cat, status) {
+    const count = status === 'BREACH' ? 26 : 14;
+    for (let i = 0; i < count; i++) {
+      const dot = sceneRef.add.circle(x, y, 2, cat.hex).setDepth(6);
+      const ang = Math.random() * Math.PI * 2;
+      const dist = Phaser.Math.Between(40, 140);
+      sceneRef.tweens.add({
+        targets: dot, x: x + Math.cos(ang) * dist, y: y + Math.sin(ang) * dist,
+        scale: 0.2, alpha: 0, duration: Phaser.Math.Between(500, 900),
+        ease: 'Cubic.easeOut', onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  function fxLightning(x, y, cat) {
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    const dst = Phaser.Math.RND.pick([{ x: 0, y }, { x: w, y }, { x, y: 0 }, { x, y: h }]);
+    const bolt = sceneRef.add.graphics().setDepth(6);
+    bolt.lineStyle(2, cat.hex, 0.9);
+    bolt.beginPath(); bolt.moveTo(x, y);
+    const segments = 8;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      bolt.lineTo(Phaser.Math.Linear(x, dst.x, t) + Phaser.Math.Between(-14, 14),
+                  Phaser.Math.Linear(y, dst.y, t) + Phaser.Math.Between(-14, 14));
+    }
+    bolt.strokePath();
+    sceneRef.tweens.add({ targets: bolt, alpha: 0, duration: 350,
+                          onComplete: () => bolt.destroy() });
+  }
+
+  function fxFilesystem(x, y, cat) {
+    for (let i = 0; i < 5; i++) {
+      const bar = sceneRef.add.rectangle(x, y - 20 + i * 8,
+                    Phaser.Math.Between(20, 60), 2, cat.hex, 0.8).setDepth(6);
+      sceneRef.tweens.add({ targets: bar, x: x + Phaser.Math.Between(-60, 60),
+                            alpha: 0, duration: 400 + i * 60,
+                            onComplete: () => bar.destroy() });
+    }
+  }
+
+  function fxPrivilege(x, y, cat) {
+    const beam = sceneRef.add.rectangle(x, y, 6, 40, cat.hex, 0.85).setDepth(6);
+    sceneRef.tweens.add({ targets: beam, scaleY: 8, alpha: 0, duration: 500,
+                          ease: 'Quad.easeOut', onComplete: () => beam.destroy() });
+    for (let i = 0; i < 4; i++) {
+      const chev = sceneRef.add.triangle(x, y, 0, 8, 6, 0, 12, 8, cat.hex).setDepth(6);
+      sceneRef.tweens.add({ targets: chev, y: y - 30 - i * 14, alpha: 0,
+                            duration: 600, delay: i * 70,
+                            onComplete: () => chev.destroy() });
+    }
+  }
+
+  function fxSecrets(x, y, cat) {
+    const ring = sceneRef.add.circle(x, y, 6).setStrokeStyle(2, cat.hex).setDepth(6);
+    sceneRef.tweens.add({ targets: ring, scale: 4, alpha: 0, duration: 600,
+                          onComplete: () => ring.destroy() });
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+      const dot = sceneRef.add.circle(x, y, 2, cat.hex).setDepth(6);
+      sceneRef.tweens.add({
+        targets: dot,
+        x: Phaser.Math.Linear(x, targetSandbox.x, (i + 1) / steps),
+        y: Phaser.Math.Linear(y, targetSandbox.y, (i + 1) / steps),
+        alpha: 0, duration: 500, delay: i * 50,
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  /* -------- Audio: voices + music -------- */
+  function playVoice(key) {
+    if (!key || !state.loaded.voices.has(key)) return;
+    const now = performance.now();
+    if (now < state.voiceCooldownUntil) return; // skip — voice currently playing
+    const snd = sceneRef.sound.add(key, { volume: 0.8 });
+    snd.once('complete', () => snd.destroy());
+    snd.play();
+    state.voiceCooldownUntil = now + 350; // short overlap floor; tune by ear
+  }
+
+  function startMusic(idx) {
+    if (state.loaded.music.size === 0) return;
+    const tracks = ASSETS.music.filter(t => state.loaded.music.has(t.key));
+    if (tracks.length === 0) return;
+    const track = tracks[idx % tracks.length];
+    stopMusic();
+    state.music.current = sceneRef.sound.add(track.key, { loop: true, volume: 0.45 });
+    state.music.current.play();
+    state.music.playing = true;
+    state.music.idx = idx;
+    document.getElementById('oz-track').textContent = track.name;
+    const btn = document.getElementById('oz-music');
+    btn.classList.add('on');
+    btn.textContent = 'MUSIC: ON';
+  }
+
+  function stopMusic() {
+    if (state.music.current) {
+      state.music.current.stop();
+      state.music.current.destroy();
+      state.music.current = null;
+    }
+    state.music.playing = false;
+    document.getElementById('oz-track').textContent = '— silent —';
+    const btn = document.getElementById('oz-music');
+    btn.classList.remove('on');
+    btn.textContent = 'MUSIC: OFF';
+  }
+
+  function toggleMusic() {
+    if (state.music.playing) stopMusic();
+    else startMusic(state.music.idx || 0);
+  }
+
+  function nextTrack() {
+    const tracks = ASSETS.music.filter(t => state.loaded.music.has(t.key));
+    if (tracks.length === 0) return;
+    const nextIdx = ((state.music.idx || 0) + 1) % tracks.length;
+    if (state.music.playing) startMusic(nextIdx);
+    else { state.music.idx = nextIdx;
+           document.getElementById('oz-track').textContent = tracks[nextIdx].name + ' (paused)'; }
+  }
+
+  /* -------- Counters -------- */
+  function bumpCounters(status) {
+    state.counters.total++;
+    if (status === 'BREACH') state.counters.breach++;
+    else state.counters.held++;
+    document.getElementById('oz-c-total').textContent = state.counters.total;
+    document.getElementById('oz-c-held').textContent  = state.counters.held;
+    document.getElementById('oz-c-breach').textContent = state.counters.breach;
+  }
+
+  /* -------- Public API -------- */
+  function mockPayload(category) {
+    const cat = CATEGORY[category] ? category : 'filesystem';
+    const vectors = VECTOR_LIBRARY[cat] || ['unknown'];
+    let status;
+    if (state.mode === 'BREACH') status = 'BREACH';
+    else if (state.mode === 'HELD') status = 'HELD';
+    else status = Math.random() < 0.35 ? 'BREACH' : 'HELD';
+    return {
+      vector: Phaser.Math.RND.pick(vectors),
+      category: cat,
+      status,
+      evidence: status === 'BREACH' ? 'exploit succeeded' : 'permission denied',
+      duration_ms: Phaser.Math.Between(80, 1600),
+    };
+  }
+
+  function cycleMode() {
+    const order = ['MIX', 'BREACH', 'HELD'];
+    state.mode = order[(order.indexOf(state.mode) + 1) % order.length];
+    const btn = document.getElementById('oz-mode');
+    btn.dataset.mode = state.mode;
+    btn.textContent = 'MODE: ' + state.mode;
+  }
+
+  function swarm(n = 20) {
+    const cats = Object.keys(VECTOR_LIBRARY);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => processIncomingAttack(mockPayload(Phaser.Math.RND.pick(cats))),
+                 i * 90);
+    }
+  }
+
+  window.OpenZerg = {
+    ping: (cat) => processIncomingAttack(mockPayload(cat)),
+    send: (payload) => processIncomingAttack(payload),
+    swarm,
+    cycleMode,
+    toggleMusic,
+    nextTrack,
+    state,
+    assetReport: () => ({
+      sprites_loaded: [...state.loaded.sprites],
+      voices_loaded: [...state.loaded.voices],
+      music_loaded:  [...state.loaded.music],
+    }),
+    reset: () => {
+      state.counters = { total: 0, held: 0, breach: 0 };
+      state.scarTints = [];
+      ['oz-c-total','oz-c-held','oz-c-breach'].forEach(id => document.getElementById(id).textContent = 0);
+      targetSandbox && targetSandbox.clearTint();
+      repaintScars();
+    },
+  };
+})();
+</script>
+</body>
+</html>
