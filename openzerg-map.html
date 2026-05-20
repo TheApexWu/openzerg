@@ -255,20 +255,54 @@
   function buildProceduralTextures(scene) {
     const g = scene.make.graphics({ add: false });
 
-    // Procedural sandbox base
+    // Procedural sandbox base — RA2-flavored "Battle Lab" stand-in.
+    // 320×320 so it scales cleanly when stretched by placeBase.
+    const W = 320, H = 320;
     g.clear();
-    g.fillStyle(0x0f172a, 1).fillRect(0, 0, 160, 160);
-    g.lineStyle(2, 0x38bdf8, 1).strokeRect(0, 0, 160, 160);
-    g.lineStyle(1, 0x1e40af, 0.6).strokeRect(10, 10, 140, 140);
-    g.fillStyle(0x38bdf8, 0.18).fillRect(70, 70, 20, 20);
-    g.generateTexture('proc_sandboxBase', 160, 160);
+    // Allied steel-blue panel
+    g.fillStyle(0x0a1628, 1).fillRect(0, 0, W, H);
+    // Outer hard border + inner rim (RTS HQ vibe)
+    g.lineStyle(4, 0x38bdf8, 1).strokeRect(2, 2, W - 4, H - 4);
+    g.lineStyle(1, 0x1e40af, 0.7).strokeRect(16, 16, W - 32, H - 32);
+    // Diagonal slats — heavy industrial feel
+    g.lineStyle(1, 0x1e40af, 0.35);
+    for (let i = 28; i < W - 28; i += 14) {
+      g.lineBetween(i, 28, 28, i);
+      g.lineBetween(W - 28, i, i, H - 28);
+    }
+    // Inner courtyard panel
+    g.fillStyle(0x0f172a, 1).fillRect(60, 60, W - 120, H - 120);
+    g.lineStyle(2, 0x38bdf8, 0.55).strokeRect(60, 60, W - 120, H - 120);
+    // Core node
+    g.fillStyle(0x38bdf8, 0.85).fillRect(W / 2 - 22, H / 2 - 22, 44, 44);
+    g.lineStyle(1, 0xbae6fd, 1).strokeRect(W / 2 - 22, H / 2 - 22, 44, 44);
+    g.fillStyle(0xbae6fd, 0.9).fillCircle(W / 2, H / 2, 5);
+    // Corner brackets — military stencil look
+    const C = 22; // bracket length
+    g.lineStyle(3, 0x4ade80, 1);
+    // top-left
+    g.lineBetween(8, 8, 8 + C, 8); g.lineBetween(8, 8, 8, 8 + C);
+    // top-right
+    g.lineBetween(W - 8, 8, W - 8 - C, 8); g.lineBetween(W - 8, 8, W - 8, 8 + C);
+    // bottom-left
+    g.lineBetween(8, H - 8, 8 + C, H - 8); g.lineBetween(8, H - 8, 8, H - 8 - C);
+    // bottom-right
+    g.lineBetween(W - 8, H - 8, W - 8 - C, H - 8); g.lineBetween(W - 8, H - 8, W - 8, H - 8 - C);
+    g.generateTexture('proc_sandboxBase', W, H);
 
-    // Procedural attacker diamond
+    // Procedural attacker — RA2-engineer-ish chevron unit
     g.clear();
+    // Body
     g.fillStyle(0xffffff, 1);
-    g.beginPath(); g.moveTo(8, 0); g.lineTo(16, 8); g.lineTo(8, 16); g.lineTo(0, 8); g.closePath();
+    g.beginPath();
+    g.moveTo(12, 0); g.lineTo(22, 8); g.lineTo(22, 18); g.lineTo(12, 24);
+    g.lineTo(2, 18); g.lineTo(2, 8); g.closePath();
     g.fillPath();
-    g.generateTexture('proc_attacker', 16, 16);
+    // Visor strip
+    g.fillStyle(0x000000, 0.55).fillRect(4, 9, 16, 4);
+    // Faction pip (gets tinted at runtime)
+    g.fillStyle(0xffffff, 1).fillCircle(12, 17, 2);
+    g.generateTexture('proc_attacker', 24, 24);
 
     // Spark
     g.clear();
@@ -290,6 +324,12 @@
       if (!targetSandbox) return;
       targetSandbox.setPosition(size.width / 2, size.height / 2);
       baseGlow.setPosition(size.width / 2, size.height / 2);
+      // Re-scale base proportional to new viewport
+      const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+      const desired = Math.min(size.width, size.height) * 0.22;
+      const src = sceneRef.textures.get(baseKey).getSourceImage();
+      targetSandbox.setScale(desired / Math.max(src.width, src.height));
+      baseGlow.setRadius(Math.min(size.width, size.height) * 0.18);
       drawGrid();
       repaintScars();
     });
@@ -317,24 +357,53 @@
 
   function placeBase() {
     const w = sceneRef.scale.width, h = sceneRef.scale.height;
-    baseGlow = sceneRef.add.circle(w / 2, h / 2, 110, 0x38bdf8, 0.05).setDepth(-1);
+    // Base glow scales with viewport
+    const glowR = Math.min(w, h) * 0.18;
+    baseGlow = sceneRef.add.circle(w / 2, h / 2, glowR, 0x38bdf8, 0.05).setDepth(-1);
     sceneRef.tweens.add({ targets: baseGlow, scale: 1.08, alpha: 0.12,
                           duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
     targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
-    // If using procedural, leave as-is. If using RA2 art, scale to a reasonable footprint.
-    if (baseKey === 'sandboxBase') {
-      const desired = 160;
-      const src = sceneRef.textures.get(baseKey).getSourceImage();
-      const scale = desired / Math.max(src.width, src.height);
-      targetSandbox.setScale(scale);
-    }
+    // Scale uniformly for both real RA2 sprite and procedural fallback —
+    // base footprint ~22% of the smaller viewport dimension.
+    const desired = Math.min(w, h) * 0.22;
+    const src = sceneRef.textures.get(baseKey).getSourceImage();
+    const scale = desired / Math.max(src.width, src.height);
+    targetSandbox.setScale(scale);
     scarFx = sceneRef.add.graphics().setDepth(2);
   }
 
-  /* -------- WebSocket -------- */
-  function connectWebSocket() {
+  /* -------- Event source: postMessage when embedded, WebSocket when standalone -------- */
+  function connectEventSource() {
     const wsLabel = document.getElementById('oz-ws');
+    const isEmbedded = (window.parent && window.parent !== window);
+
+    if (isEmbedded) {
+      // Shell drives via postMessage. Map is a pure renderer.
+      // Hide the in-iframe HUD + controls — the shell owns those now.
+      // Counters stay (shell doesn't have equivalents yet).
+      const hud = document.getElementById('openzerg-hud');
+      const ctrls = document.getElementById('openzerg-controls');
+      if (hud) hud.style.display = 'none';
+      if (ctrls) ctrls.style.display = 'none';
+
+      wsLabel.textContent = 'shell';
+      wsLabel.style.color = 'var(--accent)';
+      window.addEventListener('message', (msgEv) => {
+        const data = msgEv.data;
+        if (!data || !data.openzerg) return;
+        if (data.type === 'reset') {
+          window.OpenZerg && window.OpenZerg.reset && window.OpenZerg.reset();
+          return;
+        }
+        if (data.event) handleCanonicalEvent(data.event);
+      });
+      // Announce ready so shell can flush any queued events.
+      window.parent.postMessage({ openzerg: true, type: 'ready' }, '*');
+      return;
+    }
+
+    // Standalone: best-effort direct WebSocket. Used for solo testing.
     let socket;
     try { socket = new WebSocket('ws://localhost:8000/ws'); }
     catch { wsLabel.textContent = 'offline'; return; }
@@ -343,8 +412,18 @@
     socket.onclose   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
     socket.onerror   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
     socket.onmessage = (ev) => {
-      try { processIncomingAttack(JSON.parse(ev.data)); } catch (e) { console.error('OpenZerg parse', e); }
+      try { handleCanonicalEvent(JSON.parse(ev.data)); } catch (e) { console.error('OpenZerg parse', e); }
     };
+  }
+
+  // Map only renders impact for 'result' events. Bare legacy payloads
+  // (no 'type' field but has 'status') are treated as result for back-compat.
+  function handleCanonicalEvent(event) {
+    if (!event) return;
+    if (event.type === 'result' || (!event.type && event.status)) {
+      processIncomingAttack(event);
+    }
+    // 'started' and 'log' events are the shell's other panels' concern.
   }
 
   /* -------- Attack lifecycle -------- */

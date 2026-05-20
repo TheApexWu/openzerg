@@ -13,7 +13,7 @@ Adopted from review:
 - **Event schema is `started` / `log` / `result`,** not just final results. Drives all 3 panels naturally.
 - **Pacing queue** drains the event stream at 300–700ms between visible impacts. Live pods may burst or stall; queue keeps the map readable.
 - **URL-driven modes:** `?mode=live|replay|auto`. `auto` tries live, falls back to replay on socket failure.
-- **3-panel shell pivots from iframe-per-panel to single-page inline.** Shared event bus needs same JS scope. Closes the architecture open question.
+- **3-panel host shell: shell owns the event pipeline; map renders in an iframe driven via one-way `postMessage`.** The reviewer's "single-page" intent was about a single source of truth for the pipeline — that property is preserved by having the shell own normalizeEvent / pacingQueue / eventBus and forward already-canonical events to the map. Cheaper than refactoring the Phaser scene into a mount-into-div module. If postMessage causes drift in practice, we collapse to true inline as a Friday-night fallback.
 - **Canonical enums pinned** with a frontend normalizer for minor variations.
 - **WebSocket contract** sent to Alex this week, not negotiated Saturday morning.
 
