@@ -648,10 +648,12 @@
 
     if (data.status === 'BREACH') {
       breachCommon(x, y, cat);
+      playImpactSound('BREACH');
       playVoice('impact_breach');
       updateBaseDamage(state.counters.breach);
     } else {
       heldCommon(x, y);
+      playImpactSound('HELD');
       playVoice('impact_held');
     }
 
@@ -781,6 +783,46 @@
   }
 
   /* -------- Audio: voices + music -------- */
+  function playImpactSound(status) {
+    // Procedural collision sound so impacts still have audio even when the
+    // optional RA2 voice assets are missing from ./assets/audio.
+    if (!audioGate('sfx')) return;
+    if (!sceneRef || !sceneRef.sound || !sceneRef.sound.context) return;
+    tryUnlockAudio();
+    const ctx = sceneRef.sound.context;
+    if (!ctx || ctx.state === 'suspended') return;
+
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    if (status === 'BREACH') {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + 0.16);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + 0.24);
+      osc.onended = () => { try { gain.disconnect(); } catch {} };
+    } else {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + 0.16);
+      osc.onended = () => { try { gain.disconnect(); } catch {} };
+    }
+  }
+
   function playVoice(key) {
     if (!audioGate('sfx')) return;
     if (!key || !state.loaded.voices.has(key)) return;
