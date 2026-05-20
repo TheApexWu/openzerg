@@ -823,10 +823,14 @@
   /* -------- Aesthetic + audio toggles (driven by shell via postMessage) -------- */
   function setAesthetic(mode) {
     if (mode !== 'ra2' && mode !== 'tactical') return;
-    if (state.aesthetic === mode) return;
+    const changed = state.aesthetic !== mode;
     state.aesthetic = mode;
     if (mode === 'tactical' && state.music.playing) stopMusic();
-    rebuildBase();
+    // Always rebuild on signal — even same-mode clicks should be visibly
+    // responsive. Cheap operation, costs nothing if textures haven't changed.
+    try { rebuildBase(); }
+    catch (e) { console.error('[OpenZerg] rebuildBase failed', e); }
+    console.info('[OpenZerg] aesthetic =', mode, 'changed=', changed);
   }
 
   function setMusicEnabled(enabled) {
@@ -857,15 +861,16 @@
   }
 
   function rebuildBase() {
-    if (!sceneRef || !targetSandbox) return;
+    if (!sceneRef) { console.warn('[OpenZerg] rebuildBase: no scene'); return; }
     const w = sceneRef.scale.width, h = sceneRef.scale.height;
-    targetSandbox.destroy();
+    if (targetSandbox) { try { targetSandbox.destroy(); } catch (e) { console.warn('[OpenZerg] destroy old base', e); } }
     const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+    console.info('[OpenZerg] rebuildBase using', baseKey,
+                 '(loaded.sprites.has sandboxBase =', state.loaded.sprites.has('sandboxBase'), ')');
     targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
     const { w: fw, h: fh } = baseFootprint(baseKey);
     const desired = Math.min(w, h) * 0.22;
     targetSandbox.setScale(desired / Math.max(fw, fh));
-    // Re-apply accumulated damage on the new sprite.
     updateBaseDamage(state.counters.breach);
     repaintScars();
   }
