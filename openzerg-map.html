@@ -377,7 +377,7 @@
       sceneRef.anims.create({
         key: walkKey,
         frames: sceneRef.anims.generateFrameNumbers(key, { start: 0, end: walkEnd }),
-        frameRate: entry.frameRate || 8,
+        frameRate: Math.max(3, Math.round((entry.frameRate || 8) * 0.5)),
         repeat: -1,
       });
       state.registeredAnims.add(walkKey);
@@ -609,7 +609,7 @@
     sceneRef.tweens.add({
       targets: pod,
       x: tx, y: ty,
-      duration: Phaser.Math.Between(1400, 2200),
+      duration: Phaser.Math.Between(2800, 4400),
       ease: 'Quad.easeIn',
       onUpdate: () => {
         if (label) { label.x = pod.x - label.width / 2; label.y = pod.y - 18; }
