@@ -575,7 +575,7 @@
         const src = sceneRef.textures.get(spriteKey).getSourceImage();
         frameW = src.width; frameH = src.height;
       }
-      const desired = 44; // bigger than procedural diamond — RA2 infantry reads small
+      const desired = 220; // 5× larger RA2 infantry for stage readability
       pod.setScale(desired / Math.max(frameW, frameH));
       // Play walking animation if a spritesheet anim is registered for this unit.
       const animKey = `${spriteId}_walk`;
