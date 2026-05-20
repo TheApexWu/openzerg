@@ -162,7 +162,10 @@
   const RA2_DIR = './assets/ra-2-sprites/';
   const ASSETS = {
     sprites: {
-      sandboxBase:    RA2_DIR + 'command_center.png', // Allied Construction Yard
+      // Construction Yard with 33-frame damage progression. As breaches
+      // accumulate, the displayed frame steps from healthy → rubble.
+      sandboxBase:    { sheet: RA2_DIR + 'command_center_sheet.png',
+                        frameWidth: 228, frameHeight: 172, damageFrames: 33 },
       atk_filesystem: { sheet: RA2_DIR + 'engineer.png',
                         frameWidth: 76,  frameHeight: 80,  frameRate: 8,  animFrames: 16 },
       atk_network:    { sheet: RA2_DIR + 'spy.png',
@@ -410,11 +413,10 @@
       if (!targetSandbox) return;
       targetSandbox.setPosition(size.width / 2, size.height / 2);
       baseGlow.setPosition(size.width / 2, size.height / 2);
-      // Re-scale base proportional to new viewport
       const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+      const { w: fw, h: fh } = baseFootprint(baseKey);
       const desired = Math.min(size.width, size.height) * 0.22;
-      const src = sceneRef.textures.get(baseKey).getSourceImage();
-      targetSandbox.setScale(desired / Math.max(src.width, src.height));
+      targetSandbox.setScale(desired / Math.max(fw, fh));
       baseGlow.setRadius(Math.min(size.width, size.height) * 0.18);
       drawGrid();
       repaintScars();
@@ -441,22 +443,43 @@
     for (let y = 0; y < h; y += step) gridLayer.lineBetween(0, y, w, y);
   }
 
+  // Returns the visible footprint of the base sprite — frame dimensions for
+  // a spritesheet, source image dimensions for a single image.
+  function baseFootprint(baseKey) {
+    const entry = ASSETS.sprites.sandboxBase;
+    if (baseKey === 'sandboxBase' && entry && typeof entry === 'object') {
+      return { w: entry.frameWidth, h: entry.frameHeight };
+    }
+    const src = sceneRef.textures.get(baseKey).getSourceImage();
+    return { w: src.width, h: src.height };
+  }
+
   function placeBase() {
     const w = sceneRef.scale.width, h = sceneRef.scale.height;
-    // Base glow scales with viewport
     const glowR = Math.min(w, h) * 0.18;
     baseGlow = sceneRef.add.circle(w / 2, h / 2, glowR, 0x38bdf8, 0.05).setDepth(-1);
     sceneRef.tweens.add({ targets: baseGlow, scale: 1.08, alpha: 0.12,
                           duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
     targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
-    // Scale uniformly for both real RA2 sprite and procedural fallback —
-    // base footprint ~22% of the smaller viewport dimension.
+    const { w: fw, h: fh } = baseFootprint(baseKey);
     const desired = Math.min(w, h) * 0.22;
-    const src = sceneRef.textures.get(baseKey).getSourceImage();
-    const scale = desired / Math.max(src.width, src.height);
-    targetSandbox.setScale(scale);
+    targetSandbox.setScale(desired / Math.max(fw, fh));
     scarFx = sceneRef.add.graphics().setDepth(2);
+  }
+
+  // Step the Construction Yard damage frame in proportion to breach count.
+  // Wiki band 14 = 33 frames from intact → rubble.
+  function updateBaseDamage(breachCount) {
+    if (!targetSandbox) return;
+    if (state.aesthetic === 'tactical') return; // procedural base has no damage frames
+    const entry = ASSETS.sprites.sandboxBase;
+    if (!entry || typeof entry !== 'object' || !entry.damageFrames) return;
+    if (!state.loaded.sprites.has('sandboxBase')) return;
+    const total = entry.damageFrames;
+    // ~4 frames per breach gives a 7-breach demo a full progression to rubble.
+    const idx = Math.max(0, Math.min(total - 1, breachCount * 4));
+    targetSandbox.setFrame(idx);
   }
 
   /* -------- Event source: postMessage when embedded, WebSocket when standalone -------- */
@@ -623,6 +646,7 @@
     if (data.status === 'BREACH') {
       breachCommon(x, y, cat);
       playVoice('impact_breach');
+      updateBaseDamage(state.counters.breach);
     } else {
       heldCommon(x, y);
       playVoice('impact_held');
@@ -650,7 +674,14 @@
     const flash = sceneRef.add.circle(x, y, 10, 0xef4444).setDepth(5);
     sceneRef.tweens.add({ targets: flash, scale: 10, alpha: 0, duration: 500,
                           onComplete: () => flash.destroy() });
-    targetSandbox.setTint(0xef4444);
+    // Brief red pulse on the base (clears itself) — the persistent damage now
+    // comes from the Construction Yard's own damage-state sprite frames.
+    if (targetSandbox) {
+      targetSandbox.setTint(0xff8888);
+      sceneRef.time.delayedCall(180, () => {
+        if (targetSandbox) targetSandbox.clearTint();
+      });
+    }
     sceneRef.cameras.main.shake(180, 0.004);
     state.scarTints.push({ dx: x - targetSandbox.x, dy: y - targetSandbox.y, hex: cat.hex });
     repaintScars();
@@ -831,10 +862,11 @@
     targetSandbox.destroy();
     const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
     targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
+    const { w: fw, h: fh } = baseFootprint(baseKey);
     const desired = Math.min(w, h) * 0.22;
-    const src = sceneRef.textures.get(baseKey).getSourceImage();
-    targetSandbox.setScale(desired / Math.max(src.width, src.height));
-    // Any breach scars need to redraw because they're pinned to the new base.
+    targetSandbox.setScale(desired / Math.max(fw, fh));
+    // Re-apply accumulated damage on the new sprite.
+    updateBaseDamage(state.counters.breach);
     repaintScars();
   }
 
@@ -926,7 +958,10 @@
       ['oz-c-total','oz-c-held','oz-c-breach'].forEach(id => {
         const el = document.getElementById(id); if (el) el.textContent = 0;
       });
-      targetSandbox && targetSandbox.clearTint();
+      if (targetSandbox) {
+        targetSandbox.clearTint();
+        try { targetSandbox.setFrame(0); } catch {} // back to intact damage frame
+      }
       repaintScars();
     },
   };
