@@ -115,6 +115,35 @@
   .controls button.active   { background: var(--accent); color: #030712; }
   .controls .mode-display   { color: var(--ink); font-weight: 600; min-width: 200px; }
 
+  .controls .char-btn {
+    width: 44px; height: 44px; padding: 2px;
+    background: #0f1729; border: 1px solid var(--border);
+    border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+  }
+  .controls .char-btn:hover { transform: translateY(-2px); background: #1a2540; }
+  .controls .char-btn img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .controls .char-btn[data-category="filesystem"] { border-color: rgba(245,158,11,0.4); }
+  .controls .char-btn[data-category="network"]    { border-color: rgba(59,130,246,0.4); }
+  .controls .char-btn[data-category="privilege"]  { border-color: rgba(168,85,247,0.4); }
+  .controls .char-btn[data-category="secrets"]    { border-color: rgba(20,184,166,0.4); }
+  .controls .char-btn[data-category="resource"]   { border-color: rgba(236,72,153,0.4); }
+  .controls .char-btn[data-category="filesystem"]:hover { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b; }
+  .controls .char-btn[data-category="network"]:hover    { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+  .controls .char-btn[data-category="privilege"]:hover  { border-color: #a855f7; box-shadow: 0 0 0 1px #a855f7; }
+  .controls .char-btn[data-category="secrets"]:hover    { border-color: #14b8a6; box-shadow: 0 0 0 1px #14b8a6; }
+  .controls .char-btn[data-category="resource"]:hover   { border-color: #ec4899; box-shadow: 0 0 0 1px #ec4899; }
+
+  .controls button.swarm-btn {
+    color: var(--accent); border-color: var(--accent);
+    font-weight: 600;
+  }
+
   .controls button.aesthetic-btn, .controls button.audio-btn { min-width: 64px; }
   .controls button.aesthetic-btn.active,
   .controls button.audio-btn.active {
@@ -173,6 +202,25 @@
     <div class="group">
       <button id="ctrl-play-replay">▶ PLAY REPLAY</button>
       <button id="ctrl-reset">⟲ RESET</button>
+    </div>
+    <div class="group">
+      <span class="label">LAUNCH:</span>
+      <button class="char-btn" data-category="filesystem" title="Engineer — filesystem">
+        <img src="./assets/ra-2-sprites/engineer_thumb.png" alt="Engineer">
+      </button>
+      <button class="char-btn" data-category="network" title="Spy — network">
+        <img src="./assets/ra-2-sprites/spy_thumb.png" alt="Spy">
+      </button>
+      <button class="char-btn" data-category="privilege" title="Tanya — privilege escalation">
+        <img src="./assets/ra-2-sprites/tanya_thumb.png" alt="Tanya">
+      </button>
+      <button class="char-btn" data-category="secrets" title="Psi Comando — secrets">
+        <img src="./assets/ra-2-sprites/psi_comando_thumb.png" alt="Psi Comando">
+      </button>
+      <button class="char-btn" data-category="resource" title="Terror Drone — resource exhaustion">
+        <img src="./assets/ra-2-sprites/terror_drone_thumb.png" alt="Terror Drone">
+      </button>
+      <button class="swarm-btn" id="ctrl-swarm">⚡ SWARM x20</button>
     </div>
     <div class="group">
       <span class="label">SKIN:</span>
@@ -454,6 +502,21 @@ document.querySelectorAll('.aesthetic-btn').forEach(btn => {
 });
 document.getElementById('ctrl-music').onclick = () => setMusic(!currentMusic);
 document.getElementById('ctrl-sfx').onclick   = () => setSfx(!currentSfx);
+
+// Launch buttons — click a character thumbnail to spawn that unit as an attacker.
+// Routes through the shell's unified pipeline so kubectl + terminal + map
+// all see the event consistently (vs. the iframe's internal buttons that
+// bypassed everything).
+document.querySelectorAll('.char-btn').forEach(btn => {
+  btn.onclick = () => window.OpenZergShell.ping(btn.dataset.category);
+});
+document.getElementById('ctrl-swarm').onclick = () => {
+  const cats = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => window.OpenZergShell.ping(cats[i % cats.length]), i * 80);
+  }
+  appendLine('system', '⚡ swarm x20 launched');
+};
 
 // Forward any click in the shell to the iframe as a user-gesture signal so
 // the iframe's Web Audio context can unlock for music + voice playback

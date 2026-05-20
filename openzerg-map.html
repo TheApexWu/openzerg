@@ -575,17 +575,22 @@
     }
     state.active.pods.add(pod);
 
-    const label = sceneRef.add.text(spawn.x, spawn.y - 16,
-      `[${cat.short}] ${payload.vector || '???'}`,
-      { font: '10px monospace', color: cat.css, backgroundColor: '#000000bb',
-        padding: { x: 4, y: 2 } }).setDepth(4);
-    state.active.labels.add(label);
-
-    const trail = sceneRef.add.particles(0, 0, 'spark', {
-      follow: pod, lifespan: 350, speed: 0, quantity: 1,
-      scale: { start: 0.6, end: 0 }, tint: cat.hex, blendMode: 'ADD', frequency: 30,
-    }).setDepth(2);
-    state.active.trails.add(trail);
+    // Label + trail are debug-style affordances that read fine over a procedural
+    // diamond but feel like clutter over a real RA2 sprite. Only show them when
+    // we're rendering the procedural fallback.
+    let label = null, trail = null;
+    if (usingProc) {
+      label = sceneRef.add.text(spawn.x, spawn.y - 16,
+        `[${cat.short}] ${payload.vector || '???'}`,
+        { font: '10px monospace', color: cat.css, backgroundColor: '#000000bb',
+          padding: { x: 4, y: 2 } }).setDepth(4);
+      state.active.labels.add(label);
+      trail = sceneRef.add.particles(0, 0, 'spark', {
+        follow: pod, lifespan: 350, speed: 0, quantity: 1,
+        scale: { start: 0.6, end: 0 }, tint: cat.hex, blendMode: 'ADD', frequency: 30,
+      }).setDepth(2);
+      state.active.trails.add(trail);
+    }
 
     playVoice(cat.voice);
 
