@@ -115,6 +115,13 @@
   .controls button.active   { background: var(--accent); color: #030712; }
   .controls .mode-display   { color: var(--ink); font-weight: 600; min-width: 200px; }
 
+  .controls button.aesthetic-btn, .controls button.audio-btn { min-width: 64px; }
+  .controls button.aesthetic-btn.active,
+  .controls button.audio-btn.active {
+    background: var(--accent); color: #030712; border-color: var(--accent);
+  }
+  .controls button.audio-btn:not(.active) { color: var(--dim); }
+
   .controls .spacer { flex: 1; }
 </style>
 </head>
@@ -166,6 +173,16 @@
     <div class="group">
       <button id="ctrl-play-replay">▶ PLAY REPLAY</button>
       <button id="ctrl-reset">⟲ RESET</button>
+    </div>
+    <div class="group">
+      <span class="label">SKIN:</span>
+      <button class="aesthetic-btn" data-aesthetic="ra2">RA2</button>
+      <button class="aesthetic-btn" data-aesthetic="tactical">TACTICAL</button>
+    </div>
+    <div class="group">
+      <span class="label">AUDIO:</span>
+      <button class="audio-btn" id="ctrl-music">MUSIC</button>
+      <button class="audio-btn" id="ctrl-sfx">SFX</button>
     </div>
     <div class="spacer"></div>
     <div class="group">
@@ -372,9 +389,17 @@ const mapFrame = document.getElementById('map-frame');
 let mapReady = false;
 const mapQueue = [];
 
+function postToMap(payload) {
+  if (mapReady && mapFrame.contentWindow) mapFrame.contentWindow.postMessage(payload, '*');
+}
+
 window.addEventListener('message', (ev) => {
   if (ev.data && ev.data.openzerg && ev.data.type === 'ready') {
     mapReady = true;
+    // Push current aesthetic + audio prefs so the map's initial state agrees with the shell UI.
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'aesthetic', mode: currentAesthetic }, '*');
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'music', enabled: currentMusic }, '*');
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'sfx',   enabled: currentSfx   }, '*');
     while (mapQueue.length) mapFrame.contentWindow.postMessage(mapQueue.shift(), '*');
   }
 });
@@ -385,6 +410,52 @@ onEvent((event) => {
   if (!mapReady) mapQueue.push(msg);
   else mapFrame.contentWindow.postMessage(msg, '*');
 });
+
+/* ---------- Aesthetic + audio toggle UI ---------- */
+let currentAesthetic = localStorage.getItem('openzerg-aesthetic') || 'ra2';
+let currentMusic     = localStorage.getItem('openzerg-music') !== '0';
+let currentSfx       = localStorage.getItem('openzerg-sfx')   !== '0';
+
+function syncAestheticUI() {
+  document.querySelectorAll('.aesthetic-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.aesthetic === currentAesthetic);
+  });
+}
+function syncAudioUI() {
+  document.getElementById('ctrl-music').classList.toggle('active', currentMusic);
+  document.getElementById('ctrl-sfx').classList.toggle('active', currentSfx);
+}
+
+function setAesthetic(mode) {
+  if (mode !== 'ra2' && mode !== 'tactical') return;
+  currentAesthetic = mode;
+  localStorage.setItem('openzerg-aesthetic', mode);
+  syncAestheticUI();
+  postToMap({ openzerg: true, type: 'aesthetic', mode });
+  appendLine('system', `aesthetic → ${mode.toUpperCase()}`);
+}
+function setMusic(enabled) {
+  currentMusic = !!enabled;
+  localStorage.setItem('openzerg-music', currentMusic ? '1' : '0');
+  syncAudioUI();
+  postToMap({ openzerg: true, type: 'music', enabled: currentMusic });
+  appendLine('system', `music ${currentMusic ? 'ON' : 'OFF'}`);
+}
+function setSfx(enabled) {
+  currentSfx = !!enabled;
+  localStorage.setItem('openzerg-sfx', currentSfx ? '1' : '0');
+  syncAudioUI();
+  postToMap({ openzerg: true, type: 'sfx', enabled: currentSfx });
+  appendLine('system', `sfx ${currentSfx ? 'ON' : 'OFF'}`);
+}
+
+document.querySelectorAll('.aesthetic-btn').forEach(btn => {
+  btn.onclick = () => setAesthetic(btn.dataset.aesthetic);
+});
+document.getElementById('ctrl-music').onclick = () => setMusic(!currentMusic);
+document.getElementById('ctrl-sfx').onclick   = () => setSfx(!currentSfx);
+
+syncAestheticUI(); syncAudioUI();
 
 /* ---------- Subscriber: terminal pane ---------- */
 const terminalEl = document.getElementById('terminal-stream');

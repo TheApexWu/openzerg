@@ -211,6 +211,12 @@
     loaded: { sprites: new Set(), voices: new Set(), music: new Set() },
     voiceCooldownUntil: 0, // throttle so swarms don't overlap audio
     music: { idx: 0, playing: false, current: null },
+    // 'ra2' = prefer loaded RA2 assets, fall back to procedural if missing
+    // 'tactical' = force procedural look + silence audio (legal-safe demo)
+    aesthetic: 'ra2',
+    audio: { musicEnabled: true, sfxEnabled: true },
+    // Set of anim keys registered for spritesheet sprites (e.g. 'atk_filesystem_walk')
+    registeredAnims: new Set(),
   };
 
   /* -------- Phaser config -------- */
@@ -311,7 +317,16 @@
   }
 
   function pickSpriteKey(realKey, fallbackKey) {
+    if (state.aesthetic === 'tactical') return fallbackKey;
     return state.loaded.sprites.has(realKey) ? realKey : fallbackKey;
+  }
+
+  function audioGate(channel) {
+    // channel: 'music' | 'sfx'
+    if (state.aesthetic === 'tactical') return false;
+    if (channel === 'music') return state.audio.musicEnabled;
+    if (channel === 'sfx')   return state.audio.sfxEnabled;
+    return true;
   }
 
   /* -------- Scene boot -------- */
@@ -392,10 +407,10 @@
       window.addEventListener('message', (msgEv) => {
         const data = msgEv.data;
         if (!data || !data.openzerg) return;
-        if (data.type === 'reset') {
-          window.OpenZerg && window.OpenZerg.reset && window.OpenZerg.reset();
-          return;
-        }
+        if (data.type === 'reset')    { window.OpenZerg.reset(); return; }
+        if (data.type === 'aesthetic'){ setAesthetic(data.mode);   return; }
+        if (data.type === 'music')    { setMusicEnabled(!!data.enabled); return; }
+        if (data.type === 'sfx')      { setSfxEnabled(!!data.enabled);   return; }
         if (data.event) handleCanonicalEvent(data.event);
       });
       // Announce ready so shell can flush any queued events.
@@ -476,7 +491,19 @@
       onComplete: () => {
         trail.destroy(); label.destroy();
         triggerImpactFeedback(pod.x, pod.y, payload, cat);
-        pod.destroy();
+        // Death flash — quick scale + alpha burst, then destroy.
+        // Reads as "unit struck" before category FX takes over.
+        const startScale = pod.scaleX;
+        pod.setTint(0xffffff);
+        sceneRef.tweens.add({
+          targets: pod,
+          scaleX: startScale * 1.8,
+          scaleY: startScale * 1.8,
+          alpha: 0,
+          duration: 220,
+          ease: 'Cubic.easeOut',
+          onComplete: () => pod.destroy(),
+        });
       },
     });
   }
@@ -609,6 +636,7 @@
 
   /* -------- Audio: voices + music -------- */
   function playVoice(key) {
+    if (!audioGate('sfx')) return;
     if (!key || !state.loaded.voices.has(key)) return;
     const now = performance.now();
     if (now < state.voiceCooldownUntil) return; // skip — voice currently playing
@@ -619,6 +647,7 @@
   }
 
   function startMusic(idx) {
+    if (!audioGate('music')) return;
     if (state.loaded.music.size === 0) return;
     const tracks = ASSETS.music.filter(t => state.loaded.music.has(t.key));
     if (tracks.length === 0) return;
@@ -650,6 +679,39 @@
   function toggleMusic() {
     if (state.music.playing) stopMusic();
     else startMusic(state.music.idx || 0);
+  }
+
+  /* -------- Aesthetic + audio toggles (driven by shell via postMessage) -------- */
+  function setAesthetic(mode) {
+    if (mode !== 'ra2' && mode !== 'tactical') return;
+    if (state.aesthetic === mode) return;
+    state.aesthetic = mode;
+    if (mode === 'tactical' && state.music.playing) stopMusic();
+    rebuildBase();
+  }
+
+  function setMusicEnabled(enabled) {
+    state.audio.musicEnabled = !!enabled;
+    if (!enabled && state.music.playing) stopMusic();
+    const btn = document.getElementById('oz-music');
+    if (btn) btn.disabled = !enabled;
+  }
+
+  function setSfxEnabled(enabled) {
+    state.audio.sfxEnabled = !!enabled;
+  }
+
+  function rebuildBase() {
+    if (!sceneRef || !targetSandbox) return;
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    targetSandbox.destroy();
+    const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+    targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
+    const desired = Math.min(w, h) * 0.22;
+    const src = sceneRef.textures.get(baseKey).getSourceImage();
+    targetSandbox.setScale(desired / Math.max(src.width, src.height));
+    // Any breach scars need to redraw because they're pinned to the new base.
+    repaintScars();
   }
 
   function nextTrack() {
@@ -711,6 +773,9 @@
     cycleMode,
     toggleMusic,
     nextTrack,
+    setAesthetic,
+    setMusicEnabled,
+    setSfxEnabled,
     state,
     assetReport: () => ({
       sprites_loaded: [...state.loaded.sprites],
