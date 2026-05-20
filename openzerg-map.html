@@ -6,41 +6,38 @@
 
 <!--
   ============================================================
-  ASSET MANIFEST — drop files into ./assets/{sprites,audio,music}
+  ASSET MANIFEST — drop files into ./assets/{ra-2-sprites,audio,music}
   Anything missing falls back gracefully to a procedural sprite
   or silent audio. Demo still runs even if you have zero assets.
   ============================================================
 
-  ./assets/sprites/
-    battle_lab.png         Sandbox base (Allied or Soviet Battle Lab, ~160×160)
-    engineer.png           Attacker: filesystem  (~24×24 or larger)
-    spy.png                Attacker: network
-    tanya.png              Attacker: privilege
-    terror_drone.png       Attacker: resource
-    yuri.png               Attacker: secrets
+  ./assets/ra-2-sprites/
+    command_center.png     HQ — Allied Construction Yard, chroma-keyed + cropped
+    battle_lab.png         Alt HQ option, chroma-keyed + cropped
+    engineer.png           Walk spritesheet, 76×80/frame, ~252 frames
+    spy.png                Walk spritesheet, 86×86/frame, ~201 frames
+    tanya.png              Walk spritesheet, 130×110/frame, ~617 frames
+    terror_drone.png       Walk spritesheet, 77×77/frame, ~87 frames
+    psi_comando.png        Walk spritesheet, 56×70/frame, ~314 frames (Yuri stand-in)
+
+    Source: cnc.fandom.com infantry wiki (.gif URLs serving animated WebP);
+    converted to horizontal PNG sprite sheets via PIL. Buildings from
+    spriters-resource.com; first frame extracted via Python (chroma-key + bbox).
 
   ./assets/audio/   (mp3 or ogg, short clips < 2s)
     spawn_filesystem.mp3   "Engineer reporting"
     spawn_network.mp3      "Indeed" / spy ack
     spawn_privilege.mp3    "Shake it baby"
-    spawn_resource.mp3     Terror drone chitter / "Conscript reporting"
+    spawn_resource.mp3     Terror drone chitter
     spawn_secrets.mp3      "How do you do?"
     impact_held.mp3        Allied Battle Lab "Operating"
     impact_breach.mp3      EVA "We are under attack" / "Mission failed"
 
   ./assets/music/   (Klepacki tracks, mp3)
-    hellmarch2.mp3         Default starting track
-    industrofunk.mp3
-    burn.mp3
-    power.mp3
-    grinder.mp3
-    trance.mp3
+    hellmarch2.mp3   industrofunk.mp3   burn.mp3
+    power.mp3        grinder.mp3        trance.mp3
 
-  Sourcing:
-    - XCC Mixer on owned RA2 install → extract sprites from ra2.mix, voices from
-      audio.mix / voxa.mix, music from theme.mix (or .wav files in install dir)
-    - Community packs: CnCNet, Project Perfect Mod, ModDB
-    - DO NOT commit ./assets/ to a public repo — gray-zone IP
+  DO NOT commit ./assets/ to a public repo — gray-zone IP. .gitignore handles it.
 -->
 
 <script src="./vendor/phaser.min.js"></script>
@@ -156,15 +153,26 @@
   const ROOT = document.getElementById('openzerg-root');
   const HOST = document.getElementById('openzerg-canvas');
 
-  /* -------- Asset manifest -------- */
+  /* -------- Asset manifest --------
+     Sprite entries are either:
+       - string  — single image (load.image)
+       - object  — spritesheet { sheet, frameWidth, frameHeight, frameRate, animFrames }
+                   animFrames caps the walk-anim length (wiki sheets concatenate
+                   multiple action cycles; first 16 read as a clean loop). */
+  const RA2_DIR = './assets/ra-2-sprites/';
   const ASSETS = {
     sprites: {
-      sandboxBase:       './assets/sprites/battle_lab.png',
-      atk_filesystem:    './assets/sprites/engineer.png',
-      atk_network:       './assets/sprites/spy.png',
-      atk_privilege:     './assets/sprites/tanya.png',
-      atk_resource:      './assets/sprites/terror_drone.png',
-      atk_secrets:       './assets/sprites/yuri.png',
+      sandboxBase:    RA2_DIR + 'command_center.png', // Allied Construction Yard
+      atk_filesystem: { sheet: RA2_DIR + 'engineer.png',
+                        frameWidth: 76,  frameHeight: 80,  frameRate: 8,  animFrames: 16 },
+      atk_network:    { sheet: RA2_DIR + 'spy.png',
+                        frameWidth: 86,  frameHeight: 86,  frameRate: 8,  animFrames: 16 },
+      atk_privilege:  { sheet: RA2_DIR + 'tanya.png',
+                        frameWidth: 130, frameHeight: 110, frameRate: 8,  animFrames: 16 },
+      atk_resource:   { sheet: RA2_DIR + 'terror_drone.png',
+                        frameWidth: 77,  frameHeight: 77,  frameRate: 10, animFrames: 16 },
+      atk_secrets:    { sheet: RA2_DIR + 'psi_comando.png',
+                        frameWidth: 56,  frameHeight: 70,  frameRate: 8,  animFrames: 16 },
     },
     voices: {
       spawn_filesystem:  './assets/audio/spawn_filesystem.mp3',
@@ -249,8 +257,16 @@
       console.debug('[OpenZerg] missing asset, falling back:', file.key, file.src);
     });
 
-    // Sprites
-    for (const [key, url] of Object.entries(ASSETS.sprites)) this.load.image(key, url);
+    // Sprites — string entries load as single images, objects as spritesheets.
+    for (const [key, entry] of Object.entries(ASSETS.sprites)) {
+      if (typeof entry === 'string') {
+        this.load.image(key, entry);
+      } else if (entry && entry.sheet) {
+        this.load.spritesheet(key, entry.sheet, {
+          frameWidth: entry.frameWidth, frameHeight: entry.frameHeight,
+        });
+      }
+    }
     // Voices
     for (const [key, url] of Object.entries(ASSETS.voices)) this.load.audio(key, url);
     // Music
@@ -323,6 +339,32 @@
     return state.loaded.sprites.has(realKey) ? realKey : fallbackKey;
   }
 
+  function isSpritesheetEntry(key) {
+    const entry = ASSETS.sprites[key];
+    return entry && typeof entry === 'object' && entry.sheet;
+  }
+
+  function registerWalkAnims() {
+    // For every loaded spritesheet, create a looping walk animation using the
+    // first N frames. Wiki sheets concatenate idle+walk+attack — capping at
+    // ~16 frames keeps the loop tight and readable.
+    for (const key of Object.keys(ASSETS.sprites)) {
+      if (!isSpritesheetEntry(key)) continue;
+      if (!state.loaded.sprites.has(key)) continue;
+      const entry = ASSETS.sprites[key];
+      const animKey = `${key}_walk`;
+      const totalFrames = sceneRef.textures.get(key).frameTotal;
+      const cap = Math.min(entry.animFrames || 16, totalFrames - 1);
+      sceneRef.anims.create({
+        key: animKey,
+        frames: sceneRef.anims.generateFrameNumbers(key, { start: 0, end: cap - 1 }),
+        frameRate: entry.frameRate || 8,
+        repeat: -1,
+      });
+      state.registeredAnims.add(animKey);
+    }
+  }
+
   function audioGate(channel) {
     // channel: 'music' | 'sfx'
     if (state.aesthetic === 'tactical') return false;
@@ -334,6 +376,7 @@
   /* -------- Scene boot -------- */
   function create() {
     sceneRef = this;
+    registerWalkAnims();
     drawGrid();
     placeBase();
 
@@ -464,10 +507,20 @@
     if (usingProc) {
       pod.setTint(cat.hex);
     } else {
-      // Normalize unknown source size to a readable footprint.
-      const src = sceneRef.textures.get(spriteKey).getSourceImage();
-      const desired = 28;
-      pod.setScale(desired / Math.max(src.width, src.height));
+      // For spritesheets, scale to frame footprint (not full sheet width).
+      const entry = ASSETS.sprites[cat.sprite];
+      let frameW, frameH;
+      if (entry && typeof entry === 'object') {
+        frameW = entry.frameWidth; frameH = entry.frameHeight;
+      } else {
+        const src = sceneRef.textures.get(spriteKey).getSourceImage();
+        frameW = src.width; frameH = src.height;
+      }
+      const desired = 44; // bigger than procedural diamond — RA2 infantry reads small
+      pod.setScale(desired / Math.max(frameW, frameH));
+      // Play walking animation if a spritesheet anim is registered for this unit.
+      const animKey = `${cat.sprite}_walk`;
+      if (state.registeredAnims.has(animKey)) pod.play(animKey);
     }
     state.active.pods.add(pod);
 
