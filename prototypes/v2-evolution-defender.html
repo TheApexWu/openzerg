@@ -352,7 +352,7 @@
 
   <!-- Center: containment map (Phaser scene loaded as iframe, driven via postMessage) -->
   <section class="panel panel-center">
-    <iframe id="map-frame" src="./openzerg-map.html" title="OpenZerg containment map"></iframe>
+    <iframe id="map-frame" src="../openzerg-map.html" title="OpenZerg containment map"></iframe>
   </section>
 
   <!-- Right: raw exploit stdout -->
@@ -382,25 +382,25 @@
     <div class="group launch-ra2">
       <span class="label">LAUNCH:</span>
       <button class="char-btn" data-category="filesystem" data-sprite="atk_filesystem" title="Engineer — filesystem">
-        <img src="./assets/ra-2-sprites/engineer_thumb.png" alt="Engineer">
+        <img src="../assets/ra-2-sprites/engineer_thumb.png" alt="Engineer">
       </button>
       <button class="char-btn" data-category="network" data-sprite="atk_network" title="Spy — network">
-        <img src="./assets/ra-2-sprites/spy_thumb.png" alt="Spy">
+        <img src="../assets/ra-2-sprites/spy_thumb.png" alt="Spy">
       </button>
       <button class="char-btn" data-category="privilege" data-sprite="atk_privilege" title="Tanya — privilege escalation">
-        <img src="./assets/ra-2-sprites/tanya_thumb.png" alt="Tanya">
+        <img src="../assets/ra-2-sprites/tanya_thumb.png" alt="Tanya">
       </button>
       <button class="char-btn" data-category="secrets" data-sprite="atk_secrets" title="Psi Comando — secrets">
-        <img src="./assets/ra-2-sprites/psi_comando_thumb.png" alt="Psi Comando">
+        <img src="../assets/ra-2-sprites/psi_comando_thumb.png" alt="Psi Comando">
       </button>
       <button class="char-btn" data-category="resource" data-sprite="atk_resource" title="Terror Drone — resource exhaustion">
-        <img src="./assets/ra-2-sprites/terror_drone_thumb.png" alt="Terror Drone">
+        <img src="../assets/ra-2-sprites/terror_drone_thumb.png" alt="Terror Drone">
       </button>
       <button class="char-btn" data-category="resource" data-sprite="atk_conscript" title="Conscript — resource pressure">
-        <img src="./assets/ra-2-sprites/conscript_thumb.png" alt="Conscript">
+        <img src="../assets/ra-2-sprites/conscript_thumb.png" alt="Conscript">
       </button>
       <button class="char-btn" data-category="privilege" data-sprite="atk_gi" title="GI — privilege probe">
-        <img src="./assets/ra-2-sprites/gi_thumb.png" alt="GI">
+        <img src="../assets/ra-2-sprites/gi_thumb.png" alt="GI">
       </button>
       <button class="swarm-btn" id="ctrl-swarm-ra2">⚡ SWARM x20</button>
     </div>
@@ -444,7 +444,7 @@
 const params = new URLSearchParams(location.search);
 const MODE      = params.get('mode')   || 'auto';
 const WS_URL    = params.get('ws')     || 'ws://localhost:8000/ws';
-const REPLAY_PATH = params.get('replay') || './replay.json';
+const REPLAY_PATH = params.get('replay') || '../replay.json';
 
 const CATEGORIES = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
 
