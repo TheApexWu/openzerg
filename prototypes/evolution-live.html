@@ -173,7 +173,17 @@
   }
   .tooltip .muted { color: var(--dim); }
   .tooltip .score { font-size: 20px; font-weight: 760; font-variant-numeric: tabular-nums; }
-  .history { padding: 12px; overflow: auto; flex: 1; background: #090a0c; display: grid; align-content: start; gap: 8px; }
+  .history {
+    padding: 12px; overflow: auto; flex: 1; background: #090a0c;
+    display: grid; align-content: start; gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .history::-webkit-scrollbar { width: 8px; height: 8px; }
+  .history::-webkit-scrollbar-track { background: transparent; }
+  .history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+  .history::-webkit-scrollbar-thumb:hover { background: #3f444c; }
+  .history::-webkit-scrollbar-corner { background: transparent; }
   .run-card { border: 1px solid var(--border); background: #101216; padding: 10px; cursor: pointer; transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out); }
   .run-card:hover { background: #151820; border-color: #3f444c; }
   .run-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
