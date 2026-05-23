@@ -144,6 +144,51 @@
   .right .tab:hover { color: var(--ink); }
   .right .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
 
+  /* Saved lineage cards — rich artifact for pen tester */
+  .lineage-card {
+    border: 1px solid var(--border); background: #101216; padding: 12px;
+    transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .lineage-card:hover { background: #151820; border-color: #3f444c; }
+  .lineage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .lineage-left { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .lineage-vector {
+    font-weight: 700; font-size: 13px; color: var(--ink);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .lineage-gen {
+    font-size: 10px; color: var(--muted); border: 1px solid var(--border);
+    padding: 1px 6px; letter-spacing: 0.04em; font-weight: 600;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .lineage-right { display: flex; gap: 8px; align-items: baseline; }
+  .lineage-fit { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .lineage-status {
+    font-size: 9px; padding: 2px 7px; border: 1px solid currentColor;
+    letter-spacing: 0.1em; font-weight: 700; text-transform: uppercase;
+    align-self: center;
+  }
+  .lineage-status.breach  { color: var(--red); }
+  .lineage-status.partial { color: var(--orange); }
+  .lineage-status.low     { color: var(--green); }
+  .lineage-evidence {
+    margin: 10px 0 0; padding: 7px 10px; font-size: 11px;
+    background: #08090b; color: var(--dim);
+    border-left: 2px solid var(--border);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    line-height: 1.45;
+  }
+  .lineage-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .lineage-actions button {
+    background: transparent; color: var(--dim);
+    border: 1px solid var(--border); padding: 5px 10px; border-radius: 0;
+    font: inherit; font-size: 11px; letter-spacing: 0.04em; cursor: pointer;
+    font-weight: 600;
+    transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+  }
+  .lineage-actions button:hover { color: var(--ink); border-color: #3f444c; background: #151820; }
+  .lineage-actions button.confirmed { color: var(--green); border-color: #14532d; background: #07140d; }
+
   @media (max-width: 1100px) {
     body { overflow: auto; }
     .app { height: auto; min-height: 100vh; grid-template-columns: 1fr; grid-template-rows: auto auto 520px auto auto; }
@@ -284,12 +329,48 @@
 
   function renderSaved() {
     const saved = agents.filter(a => a.saved).slice(-12).reverse();
-    lineagePanel.innerHTML = saved.length
-      ? saved.map(a => `<article class="run-card" data-agent="${a.id}">
-          <div class="run-top"><span class="run-name">${a.id}</span><span class="run-score">${a.fitness.toFixed(2)}</span></div>
-          <div class="run-meta">preserved for regression + hardening</div>
-        </article>`).join('')
-      : '<div class="source-copy">No saved lineages yet. Run evolution to preserve survivors.</div>';
+    if (!saved.length) {
+      lineagePanel.innerHTML = '<div class="source-copy">No saved lineages yet. Run evolution to preserve survivors.</div>';
+      return;
+    }
+    lineagePanel.innerHTML = saved.map(a => {
+      const cls   = a.fitness >= 0.8 ? 'breach' : a.fitness >= 0.35 ? 'partial' : 'low';
+      const label = a.fitness >= 0.8 ? 'BREACH' : a.fitness >= 0.35 ? 'PARTIAL' : 'LOW';
+      return `<article class="lineage-card" data-agent="${a.id}">
+        <div class="lineage-top">
+          <div class="lineage-left">
+            <span class="lineage-vector">${a.vector || a.category}</span>
+            <span class="lineage-gen">g${a.generation}</span>
+          </div>
+          <div class="lineage-right">
+            <span class="lineage-fit">${a.fitness.toFixed(2)}</span>
+            <span class="lineage-status ${cls}">${label}</span>
+          </div>
+        </div>
+        <div class="lineage-evidence">${a.evidence || '—'}</div>
+        <div class="lineage-actions">
+          <button data-action="replay" data-id="${a.id}">Replay</button>
+          <button data-action="export" data-id="${a.id}">Export .py</button>
+          <button data-action="pin"    data-id="${a.id}">Pin to CI</button>
+        </div>
+      </article>`;
+    }).join('');
+
+    // Stub action wiring — real backend later. Visual + log feedback today.
+    const messages = { replay: '↻ queued', export: '✓ exported', pin: '✓ pinned to CI' };
+    const verbs    = { replay: 'replay queued for', export: 'exported .py stub for', pin: 'pinned to CI gate:' };
+    lineagePanel.querySelectorAll('.lineage-actions button').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const id     = btn.dataset.id;
+        const original = btn.textContent;
+        btn.textContent = messages[action];
+        btn.classList.add('confirmed');
+        line(`<strong>[lineage]</strong> ${verbs[action]} <strong>${id}</strong>`, 'source');
+        setTimeout(() => { btn.textContent = original; btn.classList.remove('confirmed'); }, 1400);
+      });
+    });
   }
 
   function renderHistory() {
