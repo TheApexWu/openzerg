@@ -1,0 +1,46 @@
+# OpenZerg run r1779563300
+
+- Target: https://juice-shop-production-d0c5.up.railway.app
+- Outcome: **BREACH**
+- Best fitness: 1.00
+- Generations: 1 / pods total: 3
+- Duration: 102.8s
+
+
+## BREACH path
+
+The swarm found a working exploit in generation 1, pod r1779563300-g1-p0.
+
+- Vector: `sqli_login` (category `injection`)
+- Evidence: admin token returned via SQL bypass
+
+### Raw findings
+- `POST https://juice-shop-production-d0c5.up.railway.app/rest/user/login` -> 200
+  {"authentication":{"token":"<JWT redacted; alg=RS256, type=JWT>..."}
+
+
+
+## Narrative
+
+Generation 1 spawned 3 probes; 1 survived above the 0.1 fitness floor (best 1.00, 1 breach).
+
+- pod r1779563300-g1-p0 tried `sqli_login` (tautology) — fitness 1.00. Evidence: admin token returned via SQL bypass
+- pod r1779563300-g1-p1 tried `sqli_login_union` (union_select) — fitness 0.00. Evidence: pi timed out after 60s
+- pod r1779563300-g1-p2 tried `xss_search_reflected` (reflected) — fitness 0.00. Evidence: pi timed out after 60s
+
+The run converged on a working exploit (vector `sqli_login` in generation 1). See the BREACH section above for the exact request that worked.
+
+
+## Per-generation summary
+
+| Gen | Pods | Survivors | Best fitness | Breaches |
+| --- | ---- | --------- | ------------ | -------- |
+| 1 | 3 | 1 | 1.00 | 1 |
+
+
+## Top scorers
+
+- gen 1 pod r1779563300-g1-p0 vector `sqli_login` fitness 1.00 — admin token returned via SQL bypass
+- gen 1 pod r1779563300-g1-p1 vector `sqli_login_union` fitness 0.00 — pi timed out after 60s
+- gen 1 pod r1779563300-g1-p2 vector `xss_search_reflected` fitness 0.00 — pi timed out after 60s
+

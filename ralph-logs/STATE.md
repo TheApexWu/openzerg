@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T19:10:30Z (iter 0024)
+Last updated: 2026-05-23T19:15:00Z (iter 0024)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -76,8 +76,15 @@ See `RALPH_README.md` for state machine rules and update format.
     kubectl -n openzerg get pods                              -> No resources found
 
 ### M5 — Cleanup, docs, demo script
-- status: PENDING
-- summary: (not started)
+- status: ACCEPTED
+- accepted_at: 2026-05-23T19:15:00Z
+- summary: legacy Python (backend/controller.py, backend/attacks/*.py, backend/run.sh, backend/requirements.txt, results.db*) and HTML/Phaser/replay (index.html, openzerg-map.html, replay.json, vendor/, prototypes/, scripts/dev_server.py) deleted. README.md, docs/DEMO.md, docs/ARCHITECTURE.md written. Sanitised sample summary committed at docs/sample-summary/summary-demo.{json,md}.
+- verify_evidence: |
+    find . -name "*.py" -not -path "./.git/*"  -> (none)
+    ls index.html openzerg-map.html vendor prototypes 2>&1  -> all missing
+    cd backend && go build ./...  -> ok
+    cd backend && go vet ./...    -> ok
+    cd backend && go test ./...   -> ok
 
 
 
@@ -104,3 +111,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0019 | 2026-05-23T18:18:00Z | M3 | progress | Pi research + scaffolded Dockerfile, entrypoint, SKILL.md, prompts, build script; deviation recorded (Pi uses SKILL.md, not skill.yaml)
 - iter 0022 | 2026-05-23T18:58:00Z | M3 | accepted | pi-attacker live; paid Gemma 4 pinned; 3-pod run BREACH+NOOP+NOOP; entrypoint set -e fixes + single-pass jq extraction; control plane post-completion log re-reads
 - iter 0024 | 2026-05-23T19:10:30Z | M4 | accepted | evolution loop wired: fitness.Score (PRD rules), pure-Go Mutate + cross-breed, optional Gemma 4 LLM mutation w/ 32-call budget, RunStore + summary JSON/MD writers, SIGINT cancellation. Live 3-pod 2-gen smoke -> BREACH gen 1 sqli_login (~103s); artifacts at out/summary-r1779563300.{json,md}; pods cleaned.
+- iter 0024 | 2026-05-23T19:15:00Z | M5 | accepted | legacy Python + HTML/Phaser artifacts removed; README + DEMO + ARCHITECTURE present; sanitized sample at docs/sample-summary/; build/vet/test green.

