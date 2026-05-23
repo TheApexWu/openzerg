@@ -161,41 +161,67 @@
   .right .tab:hover { color: var(--ink); }
   .right .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
 
-  /* Saved lineage cards — rich artifact for pen tester */
+  /* Saved lineage cards — fitness-led editorial layout */
   .lineage-card {
-    border: 1px solid var(--border); background: #101216; padding: 12px;
+    position: relative;
+    border: 1px solid var(--border); background: #101216;
+    padding: 14px 16px 14px 18px;
     transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
   }
+  .lineage-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--border);
+  }
+  .lineage-card.breach::before  { background: var(--red); }
+  .lineage-card.partial::before { background: var(--orange); }
+  .lineage-card.low::before     { background: var(--green); }
   .lineage-card:hover { background: #151820; border-color: #3f444c; }
-  .lineage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .lineage-left { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+
+  .lineage-top {
+    display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
+  }
+  .lineage-id { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .lineage-vector {
-    font-weight: 700; font-size: 13px; color: var(--ink);
     font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 14px; font-weight: 600; color: var(--ink);
+    letter-spacing: -0.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .lineage-gen {
-    font-size: 10px; color: var(--muted); border: 1px solid var(--border);
-    padding: 1px 6px; letter-spacing: 0.04em; font-weight: 600;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
+  .lineage-sub {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+    font-variant-numeric: tabular-nums;
   }
-  .lineage-right { display: flex; gap: 8px; align-items: baseline; }
-  .lineage-fit { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .lineage-sub .dot { opacity: 0.4; margin: 0 6px; }
+
+  .lineage-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .lineage-fit {
+    font-size: 28px; font-weight: 760; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink); letter-spacing: -0.03em;
+  }
+  .lineage-card.breach  .lineage-fit { color: var(--red); }
+  .lineage-card.partial .lineage-fit { color: var(--orange); }
+  .lineage-card.low     .lineage-fit { color: var(--green); }
   .lineage-status {
-    font-size: 9px; padding: 2px 7px; border: 1px solid currentColor;
-    letter-spacing: 0.1em; font-weight: 700; text-transform: uppercase;
-    align-self: center;
+    font-size: 9px; padding: 1px 7px;
+    border: 1px solid currentColor;
+    letter-spacing: 0.14em; font-weight: 700; text-transform: uppercase;
+    color: var(--muted);
   }
-  .lineage-status.breach  { color: var(--red); }
-  .lineage-status.partial { color: var(--orange); }
-  .lineage-status.low     { color: var(--green); }
+  .lineage-card.breach  .lineage-status { color: var(--red); }
+  .lineage-card.partial .lineage-status { color: var(--orange); }
+  .lineage-card.low     .lineage-status { color: var(--green); }
+
   .lineage-evidence {
-    margin: 10px 0 0; padding: 7px 10px; font-size: 11px;
-    background: #08090b; color: var(--dim);
-    border-left: 2px solid var(--border);
+    margin: 12px 0 0; padding: 0 0 0 12px;
+    font-size: 11px; color: var(--dim);
     font-family: "JetBrains Mono", ui-monospace, monospace;
-    line-height: 1.45;
+    line-height: 1.5;
+    border-left: 1px solid var(--border);
   }
-  .lineage-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+  .lineage-actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
   .lineage-actions button {
     background: transparent; color: var(--dim);
     border: 1px solid var(--border); padding: 5px 10px; border-radius: 0;
@@ -358,15 +384,15 @@
     lineagePanel.innerHTML = saved.map(a => {
       const cls   = a.fitness >= 0.8 ? 'breach' : a.fitness >= 0.35 ? 'partial' : 'low';
       const label = a.fitness >= 0.8 ? 'BREACH' : a.fitness >= 0.35 ? 'PARTIAL' : 'LOW';
-      return `<article class="lineage-card" data-agent="${a.id}">
+      return `<article class="lineage-card ${cls}" data-agent="${a.id}">
         <div class="lineage-top">
-          <div class="lineage-left">
+          <div class="lineage-id">
             <span class="lineage-vector">${a.vector || a.category}</span>
-            <span class="lineage-gen">g${a.generation}</span>
+            <span class="lineage-sub">Gen ${a.generation}<span class="dot">·</span>${a.category}</span>
           </div>
-          <div class="lineage-right">
+          <div class="lineage-stat">
             <span class="lineage-fit">${a.fitness.toFixed(2)}</span>
-            <span class="lineage-status ${cls}">${label}</span>
+            <span class="lineage-status">${label}</span>
           </div>
         </div>
         <div class="lineage-evidence">${a.evidence || '—'}</div>
