@@ -85,6 +85,23 @@
   .pod-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
   .fitness { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; }
 
+  .logs-wrap {
+    display: flex; flex-direction: column; flex: 1; min-height: 0;
+    background: #090a0c;
+  }
+  .logs-meta {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: #0a0b0e;
+    font-variant-numeric: tabular-nums;
+  }
+  .logs-meta-label {
+    color: var(--muted); font-size: 10px;
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+  }
+  .logs-meta-count {
+    color: var(--ink); font-size: 13px; font-weight: 700;
+  }
   .logs {
     padding: 12px; overflow: auto; flex: 1; background: #090a0c;
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -253,9 +270,14 @@
         <button class="tab"        data-view="history" role="tab">Run history</button>
         <button class="tab"        data-view="lineage" role="tab">Saved lineages</button>
       </div>
-      <span class="badge" id="log-badge">0 events</span>
     </header>
-    <div class="logs" id="logs"></div>
+    <div class="logs-wrap" id="logs-wrap">
+      <div class="logs-meta">
+        <span class="logs-meta-label">events</span>
+        <span class="logs-meta-count" id="log-badge">0</span>
+      </div>
+      <div class="logs" id="logs"></div>
+    </div>
     <div class="history hidden" id="history-panel"></div>
     <div class="history hidden" id="lineage-panel"></div>
   </section>
@@ -382,7 +404,7 @@
 
   function setRightView(mode) {
     viewMode = mode;
-    logs.classList.toggle('hidden',           mode !== 'log');
+    document.getElementById('logs-wrap').classList.toggle('hidden', mode !== 'log');
     historyPanel.classList.toggle('hidden',   mode !== 'history');
     lineagePanel.classList.toggle('hidden',   mode !== 'lineage');
     document.querySelectorAll('.right .tab').forEach(t => {
