@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenZerg — Arena</title>
+<style>
+  :root {
+    --bg: #08090b;
+    --panel: #0d0f12;
+    --panel-strong: #111318;
+    --border: #25282d;
+    --ink: #f4f4f5;
+    --muted: #71717a;
+    --dim: #a1a1aa;
+    --green: #86efac;
+    --yellow: #fde68a;
+    --orange: #fdba74;
+    --red: #fca5a5;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--sans); overflow: hidden; }
+
+  .arena-wrap { position: relative; height: 100vh; padding: 14px; display: flex; flex-direction: column; }
+
+  .hud {
+    display: flex; gap: 26px; justify-content: flex-end;
+    padding: 4px 6px 12px; font-variant-numeric: tabular-nums;
+  }
+  .hud .stat { display: flex; flex-direction: column; align-items: flex-end; }
+  .hud .stat b { font-size: 30px; font-weight: 760; letter-spacing: -0.03em; color: var(--ink); line-height: 1; }
+  .hud .stat span { color: var(--muted); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 6px; }
+  .hud .stat.held b   { color: var(--green); }
+  .hud .stat.breach b { color: var(--red); }
+  .hud .stat.held span   { color: var(--green); opacity: 0.7; }
+  .hud .stat.breach span { color: var(--red);   opacity: 0.7; }
+
+  .arena {
+    position: relative; flex: 1; border: 1px solid var(--border); background: #090a0c;
+    overflow: hidden;
+  }
+  .core {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 162px; height: 162px; display: grid; place-items: center;
+    border: 1px solid #3f444c; background: #101216;
+  }
+  .core::before {
+    content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border);
+  }
+  .core-label { text-align: center; font-size: 11px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; }
+  .core-label b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 5px; letter-spacing: 0; }
+
+  .probe {
+    position: absolute; width: 12px; height: 12px;
+    transform: translate(-50%, -50%);
+    background: var(--muted);
+    transition: left 700ms var(--ease-in-out), top 700ms var(--ease-in-out),
+                opacity 240ms var(--ease-out), transform 700ms var(--ease-in-out),
+                background 240ms var(--ease-out);
+  }
+  .probe::after {
+    content: attr(data-score); position: absolute; left: 15px; top: -8px;
+    font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+  .probe.hit { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  .scar {
+    position: absolute; width: 18px; height: 18px;
+    transform: translate(-50%, -50%);
+    border: 1px solid currentColor; background: currentColor; opacity: 0.55;
+  }
+
+  .footer-meta {
+    position: absolute; bottom: 18px; left: 22px;
+    font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .footer-meta b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="arena-wrap">
+  <div class="hud">
+    <div class="stat"><b id="hud-probes">0</b><span>Probes</span></div>
+    <div class="stat held"><b id="hud-held">0</b><span>Held</span></div>
+    <div class="stat breach"><b id="hud-breach">0</b><span>Breach</span></div>
+  </div>
+  <div class="arena" id="arena">
+    <div class="core">
+      <div class="core-label"><b>AI Sandbox</b><span id="core-state">awaiting probes</span></div>
+    </div>
+    <div class="footer-meta" id="footer-meta"></div>
+  </div>
+</div>
+<script>
+(() => {
+  const arena = document.getElementById('arena');
+  const hudP = document.getElementById('hud-probes');
+  const hudH = document.getElementById('hud-held');
+  const hudB = document.getElementById('hud-breach');
+  const coreState = document.getElementById('core-state');
+  const footerMeta = document.getElementById('footer-meta');
+
+  let counters = { probes: 0, held: 0, breach: 0 };
+  const probesByPod = new Map();
+  let timers = [];
+  let probeIndex = 0;
+  let currentGen = 1;
+
+  function colorFor(score) {
+    if (score >= 0.8) return 'var(--red)';
+    if (score >= 0.6) return 'var(--orange)';
+    if (score >= 0.35) return 'var(--yellow)';
+    if (score > 0)    return 'var(--green)';
+    return 'var(--muted)';
+  }
+
+  function fitnessFor(ev) {
+    if (typeof ev.fitness === 'number') return ev.fitness;
+    if (ev.status === 'BREACH') return 1.0;
+    const e = (ev.evidence || '').toLowerCase();
+    if (/reachable|connected|200 ok/.test(e)) return 0.6;
+    if (/permission denied|found|accessible/.test(e)) return 0.4;
+    if (/timeout|refused|blocked/.test(e)) return 0.1;
+    return 0.0;
+  }
+
+  function spawnProbe(pod, gen, category) {
+    if (probesByPod.has(pod)) return;
+    const idx = probeIndex++;
+    const probe = document.createElement('div');
+    probe.className = 'probe';
+    probe.style.background = 'var(--muted)';
+    probe.style.color = 'var(--muted)';
+    const angle = (Math.PI * 2) * ((idx * 0.618 + (gen || 1) * 0.13) % 1);
+    const sx = 50 + Math.cos(angle) * 47;
+    const sy = 50 + Math.sin(angle) * 43;
+    probe.style.left = sx + '%';
+    probe.style.top  = sy + '%';
+    arena.appendChild(probe);
+    counters.probes++;
+    hudP.textContent = counters.probes;
+    probesByPod.set(pod, { el: probe, angle });
+  }
+
+  function resolveProbe(pod, status, fitness) {
+    const p = probesByPod.get(pod);
+    if (!p) return;
+    const angle = p.angle;
+    const innerR = status === 'BREACH' ? 4 : 13 + (1 - fitness) * 15;
+    const ex = 50 + Math.cos(angle) * innerR;
+    const ey = 50 + Math.sin(angle) * innerR;
+    const color = colorFor(fitness);
+    p.el.dataset.score = fitness.toFixed(2);
+    p.el.style.color = color;
+    p.el.style.background = color;
+    requestAnimationFrame(() => {
+      p.el.style.left = ex + '%';
+      p.el.style.top  = ey + '%';
+    });
+    timers.push(setTimeout(() => {
+      p.el.classList.add('hit');
+      if (status === 'BREACH') {
+        const scar = document.createElement('div');
+        scar.className = 'scar';
+        scar.style.left = ex + '%';
+        scar.style.top  = ey + '%';
+        scar.style.color = color;
+        arena.appendChild(scar);
+      }
+      timers.push(setTimeout(() => { p.el.remove(); probesByPod.delete(pod); }, 260));
+    }, 760));
+    if (status === 'BREACH') counters.breach++;
+    else counters.held++;
+    hudH.textContent = counters.held;
+    hudB.textContent = counters.breach;
+  }
+
+  function reset() {
+    timers.forEach(clearTimeout); timers = [];
+    [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
+    probesByPod.clear();
+    probeIndex = 0;
+    counters = { probes: 0, held: 0, breach: 0 };
+    hudP.textContent = '0'; hudH.textContent = '0'; hudB.textContent = '0';
+    coreState.textContent = 'awaiting probes';
+    footerMeta.textContent = '';
+  }
+
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || !d.openzerg) return;
+    if (d.type === 'reset') return reset();
+    if (d.type === 'aesthetic' || d.type === 'music' || d.type === 'sfx') return;
+    const e = d.event;
+    if (!e) return;
+    if (e.type === 'started') {
+      spawnProbe(e.pod, e.generation || currentGen, e.category);
+    } else if (e.type === 'result') {
+      resolveProbe(e.pod, e.status, fitnessFor(e));
+    } else if (e.type === 'generation_start') {
+      currentGen = e.generation || currentGen;
+      coreState.textContent = 'generation ' + currentGen + ' active';
+      footerMeta.innerHTML = 'gen <b>' + currentGen + '</b> · <b>' + (e.population || 0) + '</b> probes spawning';
+    } else if (e.type === 'generation_complete') {
+      footerMeta.innerHTML = 'gen <b>' + e.generation + '</b> complete · <b>' + (e.survivors || 0) + '</b> survivors · <b>' + (e.breaches || 0) + '</b> breaches';
+    } else if (e.type === 'run_complete') {
+      const b = e.breaches || 0;
+      coreState.textContent = b > 0 ? 'breached' : 'contained';
+      footerMeta.innerHTML = 'run complete · <b>' + (e.generations || '?') + '</b> generations · <b>' + b + '</b> breaches · <b>' + (e.total || 0) + '</b> probes';
+    }
+  });
+
+  window.parent.postMessage({ openzerg: true, type: 'ready' }, '*');
+})();
+</script>
+</body>
+</html>
