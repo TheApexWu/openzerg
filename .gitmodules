@@ -1,0 +1,3 @@
+[submodule "vendor/openage"]
+	path = vendor/openage
+	url = https://github.com/SFTtech/openage.git
