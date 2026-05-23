@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -98,4 +99,52 @@ func RunPod(ctx context.Context, cs kubernetes.Interface, pod *corev1.Pod) (*Pod
 		res.ParseError = evolve.ErrNoJSONLine
 	}
 	return res, nil
+}
+
+// PodOutcome pairs a pod result with its run-level error (if any), preserving
+// the input index so callers can correlate fan-out results with their inputs.
+// A non-nil Err means RunPod itself failed for that pod (create / wait); the
+// Result is nil in that case. A parsed-but-empty result (no JSON line on
+// stdout) is signalled via Result.ParseError, not Err.
+type PodOutcome struct {
+	// Index is the position of this pod in the input slice passed to
+	// RunPods. Useful when the caller wants to align outcomes back to
+	// their genome metadata.
+	Index int
+	// Result is the spawn-level outcome for this pod. Nil when Err != nil.
+	Result *PodResult
+	// Err is the first stage failure from RunPod (create / wait). Nil on
+	// a clean run, even if no JSON result line was produced.
+	Err error
+}
+
+// RunPods fans out RunPod across the input pods, running them concurrently.
+// All outcomes are collected (one per input pod) and returned in input order.
+// A failure of any individual pod does NOT abort siblings; the swarm only
+// converges when every pod has either completed or been cleaned up. Context
+// cancellation propagates into each RunPod call.
+//
+// This is the M2 fan-out primitive that the cmd/openzerg run loop will call
+// once per generation. It deliberately does not enforce a parallelism cap:
+// the population sizes contemplated (≤15) are small enough that the kube
+// apiserver, not the control plane, becomes the bottleneck.
+func RunPods(ctx context.Context, cs kubernetes.Interface, pods []*corev1.Pod) ([]PodOutcome, error) {
+	if cs == nil {
+		return nil, fmt.Errorf("spawn.RunPods: nil clientset")
+	}
+	outcomes := make([]PodOutcome, len(pods))
+	var wg sync.WaitGroup
+	for i, p := range pods {
+		i, p := i, p
+		outcomes[i].Index = i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := RunPod(ctx, cs, p)
+			outcomes[i].Result = res
+			outcomes[i].Err = err
+		}()
+	}
+	wg.Wait()
+	return outcomes, nil
 }
