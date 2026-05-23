@@ -250,11 +250,8 @@ while :; do
 
   # Run opencode. Each iteration is a fresh session (no --continue).
   # --dangerously-skip-permissions is REQUIRED for unattended automation.
-  # --thinking shows the model's reasoning blocks (so you can read what it's
-  # thinking, not just what it ends up doing).
-  # We deliberately omit --print-logs / --log-level — those produce opencode's
-  # internal service logs (tool registry init, session lifecycle) which are
-  # noise, not signal.
+  # We deliberately omit --print-logs / --log-level (opencode service logs are
+  # noise) and --thinking (reasoning blocks are extra volume we don't need).
   # Output is streamed live to your terminal AND saved to the iter log via tee.
   echo "[ralph] iter ${iter_num_padded} — opencode running (live stream below)"
   echo "------------------------------------------------------------"
@@ -264,7 +261,6 @@ while :; do
   stdbuf -oL -eL "$OPENCODE_BIN" run \
     --model "$MODEL" \
     --dangerously-skip-permissions \
-    --thinking \
     --dir "$PROJECT_ROOT" \
     --title "ralph iter ${iter_num_padded}" \
     "$prompt" 2>&1 \

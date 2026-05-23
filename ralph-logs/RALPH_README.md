@@ -157,6 +157,32 @@ verbatim.
 - Pin Go module versions in `go.mod`; run `go mod tidy` after adding a dep.
 - Commit `go.sum`.
 
+## Testing policy — keep tests LIGHT
+
+This is a hackathon project. The goal is a working demo, not 90% coverage.
+Tests exist only to catch regressions in the few places where logic is
+non-obvious and the cost of being wrong is high. Specifically:
+
+- **DO** write a small unit test (5–15 lines) when:
+  - Parsing untrusted input (e.g., `ParseLastJSONLine` on pod stdout).
+  - Pure functions with branchy logic (e.g., `fitness.Score`).
+  - Mutation logic where the output shape must be valid (`mutate.Mutate`).
+- **DO NOT** write tests for:
+  - Glue code, plumbing, struct field assignments.
+  - Anything that just wraps a third-party library call (k8s client-go,
+    openrouter HTTP client). Hand-verify these against the real service.
+  - "Happy path" tests that just re-state the function.
+  - Mocks, fakes, or test fixtures for k8s / Nimble / OpenRouter. If you find
+    yourself building a mock, stop — write an integration smoke instead, or
+    skip the test.
+- A milestone's `verify` commands take priority over writing more tests. If
+  `go build ./...` and the milestone's manual smoke (`./bin/openzerg run
+  --dry-run` etc.) both pass, that is enough; you do not need a corresponding
+  `*_test.go` file.
+- Total test count across the whole project should be in the dozens, not
+  hundreds. If you've written more than ~3 test files in one iteration, stop
+  and move on to the next milestone.
+
 ---
 
 ## Cluster state policy (from PRD)
