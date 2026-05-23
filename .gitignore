@@ -51,3 +51,6 @@ npm-debug.log*
 backend/bin/
 backend/out/
 *.exe
+
+# API keys stored locally — never commit
+hidden-apikeys/

@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenZerg — Evolution Gate Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap">
+<style>
+  :root {
+    --bg: #08090b;
+    --panel: #0d0f12;
+    --panel-strong: #111318;
+    --border: #25282d;
+    --ink: #f4f4f5;
+    --muted: #71717a;
+    --dim: #a1a1aa;
+    --green: #86efac;
+    --yellow: #fde68a;
+    --orange: #fdba74;
+    --red: #fca5a5;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
+
+  .app { height: 100vh; padding: 16px; display: grid; gap: 1px; grid-template-columns: 300px minmax(460px, 1fr) 360px; grid-template-rows: auto 1fr auto; background: var(--border); }
+  .topbar, .panel, .gate { background: var(--panel); }
+  .topbar { grid-column: 1 / -1; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 4px; }
+  .mark { width: 34px; height: 34px; background: transparent url('../zerg.svg') no-repeat center/contain; }
+  h1 {
+    margin: 0; font-size: 22px; line-height: 1;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700; letter-spacing: -0.05em;
+    text-transform: lowercase;
+  }
+  .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .actions { display: flex; gap: 8px; align-items: center; }
+
+  button { border: 1px solid var(--border); background: #111318; color: var(--ink); padding: 10px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out); }
+  button:hover { border-color: #3f444c; background: #171a20; }
+  button.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 680; }
+
+  .panel { overflow: hidden; min-height: 0; }
+  .panel header { padding: 13px 14px; border-bottom: 1px solid var(--border); background: var(--panel-strong); display: flex; align-items: center; justify-content: space-between; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+  .badge, .pill { font-size: 11px; color: var(--dim); border: 1px solid var(--border); padding: 4px 8px; background: transparent; }
+  .pill { font-size: 10px; padding: 3px 7px; }
+  .pill.live { color: var(--green); }
+  .pill.demo { color: var(--yellow); }
+
+  .left { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; }
+  .center { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; }
+  .right { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; }
+  .gate { grid-column: 1 / -1; grid-row: 3; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+
+  .sources { padding: 12px; display: grid; gap: 10px; }
+  .source-card { border: 1px solid var(--border); background: #101216; padding: 12px; }
+  .source-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .source-name { font-weight: 680; font-size: 13px; }
+  .source-copy { color: var(--dim); font-size: 12px; line-height: 1.45; }
+  .metric { margin-top: 10px; display: flex; justify-content: space-between; color: var(--dim); font-size: 12px; }
+  .metric b { color: var(--ink); }
+
+  .generation-banner { margin: 14px; border: 1px solid var(--border); background: #101216; padding: 14px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+  .gen-num { width: 54px; height: 54px; display: grid; place-items: center; background: #171a20; color: var(--ink); font-weight: 760; font-size: 24px; }
+  .gen-title { font-size: 20px; font-weight: 680; letter-spacing: -0.04em; }
+  .gen-sub { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .best { text-align: right; }
+  .best .score { font-size: 28px; font-weight: 760; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .best .label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+
+  .arena { position: relative; flex: 1; margin: 0 14px 14px; border: 1px solid var(--border); background: #090a0c; overflow: hidden; }
+  .core {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 162px; height: 162px;
+    border: 1px solid #3f444c; background: #101216;
+  }
+  .core::before {
+    content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border);
+  }
+  /* Label sits OUTSIDE the box so probes never collide with it. */
+  .core-caption {
+    position: absolute; left: 50%; top: 50%;
+    /* push down by half-core + dashed-inset + gap */
+    transform: translate(-50%, calc(81px + 16px + 18px));
+    text-align: center;
+    color: var(--muted);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .core-caption .name b { color: var(--ink); font-weight: 760; }
+  .core-caption .name .meta {
+    color: var(--muted); opacity: 0.6;
+    margin-left: 6px; font-weight: 600;
+    font-style: italic; letter-spacing: 0.08em; text-transform: none;
+  }
+  .core-caption .state {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px; letter-spacing: 0.22em; font-weight: 700;
+    color: var(--muted);
+  }
+  .core-caption .state.bad  { color: var(--red); }
+  .core-caption .state.good { color: var(--green); }
+  .probe { position: absolute; width: 12px; height: 12px; transform: translate(-50%, -50%); background: var(--green); transition: left 700ms var(--ease-in-out), top 700ms var(--ease-in-out), opacity 240ms var(--ease-out), transform 700ms var(--ease-in-out); }
+  .probe::after { content: attr(data-score); position: absolute; left: 15px; top: -8px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .probe.hit { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  .scar { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 1px solid currentColor; background: currentColor; opacity: 0.55; }
+
+  .timeline { padding: 0 12px 12px; overflow: auto; display: grid; gap: 8px; }
+  .pod-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--border); background: #101216; animation: rowIn 180ms var(--ease-out); }
+  @keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .pod-name { font-size: 12px; font-weight: 680; }
+  .pod-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .fitness { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; }
+
+  .logs-wrap {
+    display: flex; flex-direction: column; flex: 1; min-height: 0;
+    background: #090a0c;
+  }
+  .logs-meta {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: #0a0b0e;
+    font-variant-numeric: tabular-nums;
+  }
+  .logs-meta-label {
+    color: var(--muted); font-size: 10px;
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+  }
+  .logs-meta-count {
+    color: var(--ink); font-size: 13px; font-weight: 700;
+  }
+  .logs-meta-divider {
+    color: var(--muted); opacity: 0.5; margin: 0 2px;
+  }
+  .logs {
+    padding: 12px; overflow: auto; flex: 1; background: #090a0c;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.55;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .logs::-webkit-scrollbar { width: 8px; height: 8px; }
+  .logs::-webkit-scrollbar-track { background: transparent; }
+  .logs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+  .logs::-webkit-scrollbar-thumb:hover { background: #3f444c; }
+  .logs::-webkit-scrollbar-corner { background: transparent; }
+  .line { color: var(--dim); white-space: pre-wrap; }
+  .line strong { color: var(--ink); }
+  .line.good { color: var(--green); }
+  .line.warn { color: var(--yellow); }
+  .line.hot { color: var(--orange); }
+  .line.bad { color: var(--red); }
+  .line.source { color: #d4d4d8; }
+
+  .gate-title { font-weight: 680; letter-spacing: -0.02em; }
+  .gate-copy { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .gate-status { padding: 10px 14px; font-weight: 760; letter-spacing: 0.08em; font-size: 12px; border: 1px solid var(--border); color: var(--dim); }
+  .gate-status.blocked { color: var(--red); border-color: #7f1d1d; background: #1c0d0d; }
+  .gate-status.cleared { color: var(--green); border-color: #14532d; background: #07140d; }
+
+
+  .hidden { display: none !important; }
+  .probe, .scar { cursor: crosshair; }
+  .probe:hover, .scar:hover { outline: 1px solid var(--ink); outline-offset: 3px; }
+  .tooltip {
+    position: fixed; z-index: 50; min-width: 240px; max-width: 320px; pointer-events: none;
+    border: 1px solid var(--border); background: #08090b; color: var(--ink); padding: 10px;
+    font-size: 12px; line-height: 1.45; box-shadow: 0 10px 40px rgba(0,0,0,.32);
+  }
+  .tooltip .muted { color: var(--dim); }
+  .tooltip .score { font-size: 20px; font-weight: 760; font-variant-numeric: tabular-nums; }
+  .history {
+    padding: 12px; overflow: auto; flex: 1; background: #090a0c;
+    display: grid; align-content: start; gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .history::-webkit-scrollbar { width: 8px; height: 8px; }
+  .history::-webkit-scrollbar-track { background: transparent; }
+  .history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+  .history::-webkit-scrollbar-thumb:hover { background: #3f444c; }
+  .history::-webkit-scrollbar-corner { background: transparent; }
+  .run-card { border: 1px solid var(--border); background: #101216; padding: 10px; cursor: pointer; transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out); }
+  .run-card:hover { background: #151820; border-color: #3f444c; }
+  .run-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .run-name { font-weight: 680; font-size: 12px; }
+  .run-score { font-weight: 760; font-variant-numeric: tabular-nums; }
+  .run-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .source-card.compact { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+
+  .right header { padding: 0 14px; }
+  .right .tabs { display: flex; gap: 0; align-items: center; }
+  .right .tab {
+    background: transparent; color: var(--dim);
+    border: 0; border-bottom: 1px solid transparent;
+    padding: 13px 0; margin-right: 18px;
+    font: inherit; font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase;
+    font-weight: 700; cursor: pointer; transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .right .tab:last-child { margin-right: 0; }
+  .right .tab:hover { color: var(--ink); }
+  .right .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+  /* Saved lineage cards — fitness-led editorial layout */
+  .lineage-card {
+    position: relative;
+    border: 1px solid var(--border); background: #101216;
+    padding: 14px 16px 14px 18px;
+    transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .lineage-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--border);
+  }
+  .lineage-card.breach::before  { background: var(--red); }
+  .lineage-card.partial::before { background: var(--orange); }
+  .lineage-card.low::before     { background: var(--green); }
+  .lineage-card:hover { background: #151820; border-color: #3f444c; }
+
+  .lineage-top {
+    display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
+  }
+  .lineage-id { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .lineage-vector {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 14px; font-weight: 600; color: var(--ink);
+    letter-spacing: -0.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lineage-sub {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .lineage-sub .dot { opacity: 0.4; margin: 0 6px; }
+
+  .lineage-stat { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; position: relative; }
+  .lineage-fit {
+    font-size: 28px; font-weight: 760; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink); letter-spacing: -0.03em;
+    cursor: help;
+    border-bottom: 1px dotted transparent;
+    transition: border-color 140ms var(--ease-out);
+  }
+  .lineage-fit:hover { border-bottom-color: currentColor; }
+
+  /* Fitness score hover tooltip — explains the 0.00–1.00 scale */
+  .fit-tip {
+    position: absolute; top: calc(100% + 8px); right: 0;
+    width: 240px; padding: 10px 12px;
+    background: #0a0c0f; border: 1px solid #2a2f37;
+    color: var(--ink); font-size: 11px; line-height: 1.5;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+    opacity: 0; pointer-events: none; transform: translateY(-4px);
+    transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
+    z-index: 50;
+  }
+  .lineage-stat:hover .fit-tip { opacity: 1; transform: translateY(0); }
+  .fit-tip-title {
+    font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    font-weight: 700; color: var(--muted); margin-bottom: 6px;
+  }
+  .fit-tip-now {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--dim); margin-bottom: 8px;
+    padding-bottom: 8px; border-bottom: 1px solid #2a2f37;
+  }
+  .fit-tip-now b { color: var(--ink); font-weight: 700; }
+  .fit-scale { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; }
+  .fit-scale .k {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; font-weight: 700;
+  }
+  .fit-scale .v { color: var(--dim); }
+  .fit-scale .k.red    { color: var(--red); }
+  .fit-scale .k.orange { color: var(--orange); }
+  .fit-scale .k.green  { color: var(--green); }
+  .lineage-card.breach  .lineage-fit { color: var(--red); }
+  .lineage-card.partial .lineage-fit { color: var(--orange); }
+  .lineage-card.low     .lineage-fit { color: var(--green); }
+  .lineage-status {
+    font-size: 9px; padding: 1px 7px;
+    border: 1px solid currentColor;
+    letter-spacing: 0.14em; font-weight: 700; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .lineage-card.breach  .lineage-status { color: var(--red); }
+  .lineage-card.partial .lineage-status { color: var(--orange); }
+  .lineage-card.low     .lineage-status { color: var(--green); }
+
+  .lineage-evidence {
+    margin: 12px 0 0; padding: 0 0 0 12px;
+    font-size: 11px; color: var(--dim);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    line-height: 1.5;
+    border-left: 1px solid var(--border);
+  }
+
+  .lineage-actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .lineage-actions button {
+    background: transparent; color: var(--dim);
+    border: 1px solid var(--border); padding: 5px 10px; border-radius: 0;
+    font: inherit; font-size: 11px; letter-spacing: 0.04em; cursor: pointer;
+    font-weight: 600;
+    transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+  }
+  .lineage-actions button:hover { color: var(--ink); border-color: #3f444c; background: #151820; }
+  .lineage-actions button.confirmed { color: var(--green); border-color: #14532d; background: #07140d; }
+
+  @media (max-width: 1100px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100vh; grid-template-columns: 1fr; grid-template-rows: auto auto 520px auto auto; }
+    .topbar, .left, .center, .right, .gate { grid-column: 1; grid-row: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>OpenZerg</h1><!-- rendered lowercase via text-transform -->
+    </div>
+    <div class="actions">
+      <button id="btn-refresh">Refresh data</button>
+      <button id="btn-reset">Reset</button>
+      <button id="btn-compare">Compare runs</button>
+      <button id="btn-hardened">Queue hardened</button>
+      <button id="btn-run" class="primary">Run evolution</button>
+    </div>
+  </header>
+
+  <section class="panel left">
+    <header><span class="eyebrow">Data sources</span><span class="badge" id="source-badge">probing</span></header>
+    <div class="sources">
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">ClickHouse</span><span class="pill" id="ch-status">probing</span></div>
+        <div class="source-copy">Probe telemetry, fitness history, and generation aggregates. Auth should run server-side via local proxy or ClickHouse Cloud credentials.</div>
+        <div class="metric"><span>events written</span><b id="ch-events">0</b></div>
+        <div class="metric"><span>best fitness</span><b id="ch-best">0.00</b></div>
+      </article>
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">Nimble</span><span class="pill" id="nimble-status">probing</span></div>
+        <div class="source-copy">Live web/CVE intelligence seeds Generation 1 genomes, then survivors mutate around the most promising weaknesses.</div>
+        <div class="metric"><span>CVE seeds</span><b id="nimble-seeds">0</b></div>
+        <div class="metric"><span>freshness</span><b id="nimble-fresh">—</b></div>
+      </article>
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">Deployment policy</span><span class="pill">gate</span></div>
+        <div class="source-copy">Block automatically if any generation reaches fitness ≥ 0.80. Clear only when the swarm converges below threshold.</div>
+      </article>
+    </div>
+  </section>
+
+  <main class="panel center">
+    <header><span class="eyebrow">Evolution loop</span><span class="badge" id="loop-badge">idle</span></header>
+    <div class="generation-banner">
+      <div class="gen-num" id="gen-num">—</div>
+      <div><div class="gen-title" id="gen-title">Waiting for container spin-up</div><div class="gen-sub" id="gen-sub">The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.</div></div>
+      <div class="best"><div class="score" id="best-score">0.00</div><div class="label">best fitness</div></div>
+    </div>
+    <div class="arena" id="arena">
+      <div class="core"></div>
+      <div class="core-caption">
+        <span class="name"><b>AI Sandbox</b></span>
+        <span class="state" id="core-state">deployment pending</span>
+      </div>
+    </div>
+  </main>
+
+  <section class="panel right">
+    <header>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-view="log"     role="tab">Swarm log</button>
+        <button class="tab"        data-view="history" role="tab">Run history</button>
+        <button class="tab"        data-view="lineage" role="tab">Saved lineages</button>
+      </div>
+    </header>
+    <div class="logs-wrap" id="logs-wrap">
+      <div class="logs-meta hidden" id="logs-meta">
+        <span class="logs-meta-label">events</span>
+        <span class="logs-meta-count" id="log-badge">0</span>
+        <span class="logs-meta-divider">·</span>
+        <span class="logs-meta-label">runs</span>
+        <span class="logs-meta-count" id="run-num">0</span>
+      </div>
+      <div class="logs" id="logs"></div>
+    </div>
+    <div class="history hidden" id="history-panel"></div>
+    <div class="history hidden" id="lineage-panel"></div>
+  </section>
+
+  <section class="gate">
+    <div>
+      <div class="gate-title" id="gate-title">Deployment gate armed</div>
+      <div class="gate-copy" id="gate-copy">No human approves the deployment. The swarm decides from fitness evidence.</div>
+    </div>
+    <div class="gate-status" id="gate-status">PENDING</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const arena = $('arena');
+  const logs = $('logs');
+  const historyPanel = $('history-panel');
+  const lineagePanel = $('lineage-panel');
+  let viewMode = 'log';
+  let eventCount = 0;
+  let bestFitness = 0;
+  let chEvents = 0;
+  let hardened = false;
+  let timers = [];
+  let agents = [];
+  let runs = [];
+  let runSeq = 1;
+
+  const seeds = [
+    'CVE-2026-1182 containerd mount propagation',
+    'CVE-2026-2041 kubelet unauthenticated metrics',
+    'CVE-2026-3109 service-account token over-scope',
+  ];
+
+  const categories = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
+  const vectors = {
+    filesystem: ['proc-root traversal', 'hostPath mount', 'symlink boundary'],
+    network: ['k8s-api reachability', 'egress exfil', 'kubelet probe'],
+    privilege: ['docker socket', 'nsenter host pid', 'capability scan'],
+    secrets: ['service-account token', 'env var scrape', 'secret list'],
+    resource: ['fork bomb', 'memory pressure', 'disk fill'],
+  };
+
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tooltip hidden';
+  document.body.appendChild(tooltip);
+
+  function showTooltip(agent, ev) {
+    tooltip.innerHTML = `<div class="muted">${agent.role || 'attacker'} · ${agent.id}</div>
+      <div class="score" style="color:${colorFor(agent.fitness)}">${agent.fitness.toFixed(2)}</div>
+      <div>${agent.vector}</div>
+      <div class="muted">generation ${agent.generation} · ${agent.category} · ${agent.source || 'simulation'}</div>
+      <div class="muted">${agent.evidence}</div>`;
+    tooltip.classList.remove('hidden');
+    moveTooltip(ev);
+  }
+  function moveTooltip(ev) {
+    tooltip.style.left = Math.min(window.innerWidth - 340, ev.clientX + 14) + 'px';
+    tooltip.style.top = Math.min(window.innerHeight - 160, ev.clientY + 14) + 'px';
+  }
+  function hideTooltip() { tooltip.classList.add('hidden'); }
+
+  function bindAgentHover(el, agent) {
+    el.addEventListener('mouseenter', (ev) => showTooltip(agent, ev));
+    el.addEventListener('mousemove', moveTooltip);
+    el.addEventListener('mouseleave', hideTooltip);
+  }
+
+  function renderSaved() {
+    const saved = agents.filter(a => a.saved).slice(-12).reverse();
+    if (!saved.length) {
+      lineagePanel.innerHTML = '<div class="source-copy">No saved lineages yet. Run evolution to preserve survivors.</div>';
+      return;
+    }
+    lineagePanel.innerHTML = saved.map(a => {
+      const cls   = a.fitness >= 0.8 ? 'breach' : a.fitness >= 0.35 ? 'partial' : 'low';
+      const label = a.fitness >= 0.8 ? 'BREACH' : a.fitness >= 0.35 ? 'PARTIAL' : 'LOW';
+      const tierCopy = a.fitness >= 0.8
+        ? 'Full exploit reproduced. Deployment gate should block.'
+        : a.fitness >= 0.35
+          ? 'Partial crack. Useful mutation signal, not a full breach.'
+          : 'Contained by current policy.';
+      return `<article class="lineage-card ${cls}" data-agent="${a.id}">
+        <div class="lineage-top">
+          <div class="lineage-id">
+            <span class="lineage-vector">${a.vector || a.category}</span>
+            <span class="lineage-sub">Gen ${a.generation}<span class="dot">·</span>${a.category}</span>
+          </div>
+          <div class="lineage-stat">
+            <span class="lineage-fit" tabindex="0" aria-label="Fitness score ${a.fitness.toFixed(2)} — ${label}">${a.fitness.toFixed(2)}</span>
+            <span class="lineage-status">${label}</span>
+            <div class="fit-tip" role="tooltip">
+              <div class="fit-tip-title">Fitness score</div>
+              <div class="fit-tip-now"><b>${a.fitness.toFixed(2)}</b> — ${tierCopy}</div>
+              <div class="fit-scale">
+                <span class="k red">≥ 0.80</span><span class="v">breach — full exploit</span>
+                <span class="k orange">≥ 0.35</span><span class="v">partial — useful signal</span>
+                <span class="k green">&lt; 0.35</span><span class="v">contained</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="lineage-evidence">${a.evidence || '—'}</div>
+        <div class="lineage-actions">
+          <button data-action="replay" data-id="${a.id}">Replay</button>
+          <button data-action="export" data-id="${a.id}">Export .py</button>
+          <button data-action="pin"    data-id="${a.id}">Pin to CI</button>
+        </div>
+      </article>`;
+    }).join('');
+
+    // Stub action wiring — real backend later. Visual + log feedback today.
+    const messages = { replay: '↻ queued', export: '✓ exported', pin: '✓ pinned to CI' };
+    const verbs    = { replay: 'replay queued for', export: 'exported .py stub for', pin: 'pinned to CI gate:' };
+    lineagePanel.querySelectorAll('.lineage-actions button').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const id     = btn.dataset.id;
+        const original = btn.textContent;
+        btn.textContent = messages[action];
+        btn.classList.add('confirmed');
+        line(`<strong>[lineage]</strong> ${verbs[action]} <strong>${id}</strong>`, 'source');
+        setTimeout(() => { btn.textContent = original; btn.classList.remove('confirmed'); }, 1400);
+      });
+    });
+  }
+
+  function renderHistory() {
+    historyPanel.innerHTML = runs.length ? runs.slice().reverse().map(r => `<article class="run-card" data-run="${r.id}">
+      <div class="run-top"><span class="run-name">${r.name}</span><span class="run-score">${r.best.toFixed(2)}</span></div>
+      <div class="run-meta">${r.decision} · ${r.agents} agents · ${r.saved} saved · ${r.time}</div>
+    </article>`).join('') : '<div class="source-copy">No historical runs yet. Run evolution to create one.</div>';
+  }
+
+  function setRightView(mode) {
+    viewMode = mode;
+    document.getElementById('logs-wrap').classList.toggle('hidden', mode !== 'log');
+    historyPanel.classList.toggle('hidden',   mode !== 'history');
+    lineagePanel.classList.toggle('hidden',   mode !== 'lineage');
+    document.querySelectorAll('.right .tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.view === mode);
+    });
+    if (mode === 'history') renderHistory();
+    if (mode === 'lineage') renderSaved();
+  }
+
+  async function refreshData() {
+    await probeSources();
+    try {
+      const r = await fetch('/api/evolution/runs', { cache: 'no-store' });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data.runs)) runs = data.runs.concat(runs).slice(0, 20);
+      }
+    } catch {}
+    renderHistory(); renderSaved();
+  }
+
+  function colorFor(score) {
+    if (score >= 0.8) return 'var(--red)';
+    if (score >= 0.6) return 'var(--orange)';
+    if (score >= 0.35) return 'var(--yellow)';
+    if (score > 0) return 'var(--green)';
+    return 'var(--muted)';
+  }
+
+  function line(text, cls = '') {
+    const div = document.createElement('div');
+    div.className = 'line ' + cls;
+    div.innerHTML = text;
+    logs.appendChild(div);
+    logs.scrollTop = logs.scrollHeight;
+    eventCount++;
+    $('log-badge').textContent = eventCount;
+    document.getElementById('logs-meta').classList.remove('hidden');
+  }
+
+  function setGate(status, title, copy) {
+    $('gate-status').textContent = status;
+    $('gate-status').className = 'gate-status ' + (status === 'BLOCKED' ? 'blocked' : status === 'CLEARED' ? 'cleared' : '');
+    $('gate-title').textContent = title;
+    $('gate-copy').textContent = copy;
+  }
+
+  async function probeSources() {
+    let liveCount = 0;
+    try {
+      const r = await fetch('/api/integrations/clickhouse', { cache: 'no-store' });
+      if (r.ok) { $('ch-status').textContent = 'live'; $('ch-status').className = 'pill live'; liveCount++; }
+    } catch {}
+    try {
+      const r = await fetch('/api/integrations/nimble', { cache: 'no-store' });
+      if (r.ok) { $('nimble-status').textContent = 'live'; $('nimble-status').className = 'pill live'; liveCount++; }
+    } catch {}
+    $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'awaiting feeds';
+  }
+
+  // ---- Run queue: never interrupt an in-flight run; chain instead. ----
+  let runQueue = [];        // pending: ['permissive' | 'hardened', ...]
+  let runInProgress = false;
+  let lastDecision = 'idle';
+
+  function enqueueRun(kind) {
+    runQueue.push(kind);
+    if (!runInProgress) drainRunQueue();
+    else updateRunCounter('active', currentKind());
+  }
+
+  function enqueueComparison() {
+    // Clear any pending queue and chain permissive → hardened back-to-back.
+    runQueue = ['permissive', 'hardened'];
+    if (!runInProgress) drainRunQueue();
+    else updateRunCounter('active', currentKind());
+  }
+
+  function drainRunQueue() {
+    if (runQueue.length === 0) {
+      runInProgress = false;
+      updateRunCounter(lastDecision === 'BLOCKED' ? 'blocked' : lastDecision === 'CLEARED' ? 'complete' : 'idle');
+      return;
+    }
+    const next = runQueue.shift();
+    runInProgress = true;
+    line(`▶ run queued: <strong>${next}</strong>`, 'source');
+    runEvolution(next === 'hardened');
+  }
+
+  let _activeKind = null;
+  function currentKind() { return _activeKind; }
+
+  function clearLineages() {
+    // Explicit user action — wipes the corpus too.
+    runQueue = []; runInProgress = false; _activeKind = null;
+    runs = []; runSeq = 1;
+    agents = [];
+    runResetVisuals(true);
+    lastDecision = 'idle';
+    updateRunCounter('idle');
+    renderHistory(); renderSaved();
+  }
+
+  function runResetVisuals(full = false) {
+    timers.forEach(clearTimeout); timers = [];
+    [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
+    logs.innerHTML = ''; eventCount = 0; bestFitness = 0; chEvents = 0;
+    $('log-badge').textContent = '0'; $('loop-badge').textContent = 'idle';
+    document.getElementById('logs-meta').classList.add('hidden');
+    $('gen-num').textContent = '—'; $('gen-title').textContent = 'Waiting for container spin-up';
+    $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
+    $('best-score').textContent = '0.00'; $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = '—';
+    $('core-state').textContent = 'deployment pending';
+    $('core-state').className = 'state';
+    if (full) {
+      $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
+    }
+    setGate('PENDING', 'Deployment gate armed', 'No human approves the deployment. The swarm decides from fitness evidence.');
+  }
+
+  function updateRunCounter(/* status, activeKind */) {
+    const el = $('run-num');
+    if (el) el.textContent = runs.length;
+  }
+
+  function reset() {
+    // "Soft" reset — clears the visual arena + logs for the next run.
+    // Does NOT clear saved lineages (the regression corpus) or run history;
+    // use Clear lineages in the topbar for that.
+    runResetVisuals(false);
+    renderSaved();
+  }
+
+  function spawnProbe(gen, i, score, category, source = 'simulation') {
+    const vector = vectors[category][(gen + i) % vectors[category].length];
+    const agent = {
+      id: `g${gen}-${category.slice(0,3)}-${String(i).padStart(2,'0')}`,
+      role: score >= 0.55 ? 'attacker' : 'probe', generation: gen, category, vector, source,
+      fitness: score, saved: score >= 0.6,
+      evidence: score >= 0.8 ? 'breach path found; deployment gate should block' : score >= 0.35 ? 'partial crack found; useful mutation signal' : 'contained by current policy'
+    };
+    agents.push(agent);
+
+    const probe = document.createElement('div');
+    probe.className = 'probe';
+    probe.dataset.score = score.toFixed(2);
+    probe.style.color = colorFor(score);
+    probe.style.background = colorFor(score);
+    bindAgentHover(probe, agent);
+    const angle = (Math.PI * 2) * ((i * 0.618 + gen * 0.13) % 1);
+    const sx = 50 + Math.cos(angle) * 47;
+    const sy = 50 + Math.sin(angle) * 43;
+    const ex = 50 + Math.cos(angle) * (score >= 0.8 ? 4 : 13 + (1 - score) * 15);
+    const ey = 50 + Math.sin(angle) * (score >= 0.8 ? 4 : 13 + (1 - score) * 15);
+    probe.style.left = sx + '%'; probe.style.top = sy + '%';
+    arena.appendChild(probe);
+    requestAnimationFrame(() => { probe.style.left = ex + '%'; probe.style.top = ey + '%'; });
+    timers.push(setTimeout(() => {
+      probe.classList.add('hit');
+      const scar = document.createElement('div'); scar.className = 'scar'; scar.style.left = ex + '%'; scar.style.top = ey + '%'; scar.style.color = colorFor(score); bindAgentHover(scar, agent); arena.appendChild(scar);
+      timers.push(setTimeout(() => probe.remove(), 260));
+    }, 760));
+
+    const cls = score >= 0.8 ? 'bad' : score >= 0.6 ? 'hot' : score >= 0.35 ? 'warn' : 'good';
+    line(`<strong>[${agent.id}]</strong> ${vector} → fitness <strong>${score.toFixed(2)}</strong>${agent.saved ? ' · saved' : ''}`, cls);
+    bestFitness = Math.max(bestFitness, score);
+    chEvents++;
+    $('best-score').textContent = bestFitness.toFixed(2);
+    $('ch-events').textContent = chEvents;
+    $('ch-best').textContent = bestFitness.toFixed(2);
+    renderSaved();
+  }
+
+  function runEvolution(isHardened = false) {
+    reset(); hardened = isHardened;
+    _activeKind = isHardened ? 'hardened' : 'permissive';
+    runInProgress = true;
+    updateRunCounter('active', _activeKind);
+    $('loop-badge').textContent = isHardened ? 'hardened run' : 'autonomous run';
+    $('core-state').textContent = isHardened ? 'hardened config' : 'permissive config';
+    line('▶ container spin-up detected — OpenZerg starts without human approval', 'source');
+    line('▶ Nimble feed pulled recent CVE context for Generation 1 seeds', 'source');
+    $('nimble-seeds').textContent = seeds.length;
+    $('nimble-fresh').textContent = 'last 7d';
+    seeds.forEach(s => line(`  seed: ${s}`, 'source'));
+
+    const gens = isHardened
+      ? [[0.10,0.14,0.22,0.30,0.18,0.26,0.12], [0.12,0.20,0.28,0.33,0.24,0.18], [0.10,0.16,0.24,0.29,0.22], [0.08,0.14,0.20,0.25]]
+      : [[0.10,0.20,0.40,0.12,0.60,0.35,0.00], [0.28,0.45,0.62,0.68,0.38,0.55], [0.42,0.66,0.74,0.91,1.00]];
+
+    let t = 700;
+    gens.forEach((scores, idx) => {
+      const gen = idx + 1;
+      timers.push(setTimeout(() => {
+        $('gen-num').textContent = gen;
+        $('gen-title').textContent = `Generation ${gen}`;
+        $('gen-sub').textContent = gen === 1 ? 'Base vectors spawned from CVE/web seeds.' : 'Children spawned from survivors; weak genomes removed.';
+        line(`▶ generation_start g${gen}: spawning ${scores.length} isolated pods`, 'source');
+      }, t));
+      t += 360;
+      scores.forEach((score, i) => {
+        timers.push(setTimeout(() => spawnProbe(gen, i + 1, score, categories[(i + gen) % categories.length]), t));
+        t += 260;
+      });
+      timers.push(setTimeout(() => {
+        const max = Math.max(...scores);
+        const survivors = scores.filter(s => s >= 0.35).length;
+        const cls = max >= 0.8 ? 'bad' : max >= 0.6 ? 'hot' : 'warn';
+        line(`▶ generation_complete g${gen}: survivors=${survivors}, best_fitness=${max.toFixed(2)}, bottom_half=killed`, cls);
+      }, t + 200));
+      t += 900;
+    });
+
+    timers.push(setTimeout(() => {
+      if (bestFitness >= 0.8) {
+        setGate('BLOCKED', 'Deployment blocked by autonomous gate', `Best fitness ${bestFitness.toFixed(2)} exceeded policy threshold 0.80.`);
+        $('core-state').textContent = 'blocked';
+        $('core-state').className = 'state bad';
+        line('■ Datadog alert would fire: near-breach / breach fitness threshold exceeded', 'bad');
+        line('■ ClickHouse stored generation scores for regression comparison', 'source');
+      } else {
+        setGate('CLEARED', 'Deployment cleared after convergence', `Four generations converged below policy threshold. Best fitness ${bestFitness.toFixed(2)}.`);
+        $('core-state').textContent = 'cleared';
+        $('core-state').className = 'state good';
+        line('■ convergence reached — no breach path survived mutation', 'good');
+        line('■ ClickHouse stored clean run as hardened baseline', 'source');
+      }
+      const decision = bestFitness >= 0.8 ? 'BLOCKED' : 'CLEARED';
+      runs.push({ id: `run-${runSeq++}`, name: `${isHardened ? 'Hardened' : 'Permissive'} run`, best: bestFitness, decision, agents: agents.length, saved: agents.filter(a => a.saved).length, time: new Date().toLocaleTimeString() });
+      renderHistory(); renderSaved();
+      lastDecision = decision;
+      _activeKind = null;
+      $('loop-badge').textContent = 'complete';
+      // Chain next queued run, or settle to idle status.
+      setTimeout(drainRunQueue, 600);
+    }, t + 300));
+  }
+
+  $('btn-run').onclick      = () => enqueueRun('permissive');
+  $('btn-reset').onclick    = clearLineages;
+  $('btn-hardened').onclick = () => enqueueRun('hardened');
+  $('btn-compare').onclick  = enqueueComparison;
+  $('btn-refresh').onclick = refreshData;
+  document.querySelectorAll('.right .tab').forEach(t => {
+    t.addEventListener('click', () => setRightView(t.dataset.view));
+  });
+
+  probeSources();
+  setInterval(refreshData, 8000);
+  reset();
+})();
+</script>
+</body>
+</html>
