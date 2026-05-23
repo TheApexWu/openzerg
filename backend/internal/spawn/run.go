@@ -69,19 +69,24 @@ func RunPod(ctx context.Context, cs kubernetes.Interface, pod *corev1.Pod) (*Pod
 		_ = k8s.DeletePod(context.Background(), cs, created.Namespace, created.Name)
 	}()
 
-	// Start log streaming concurrently with the wait. If the stream open
-	// fails (pod not yet scheduled, transient API error) we treat it as a
-	// soft failure: keep waiting for terminal phase; parse what we have.
-	stream, streamErr := k8s.StreamLogs(ctx, cs, created.Namespace, created.Name, "")
-	var raw []byte
-	if streamErr == nil {
-		raw, _ = io.ReadAll(stream)
-		_ = stream.Close()
-	}
-
+	// Wait for terminal phase before reading logs. If we open a follow=true
+	// stream too early (before the container has started) the API server
+	// returns "container ... is waiting to start" and we get nothing. The
+	// pods we run print their result and exit in a couple of seconds; we
+	// can simply wait, then read the now-complete log buffer in one shot.
 	final, waitErr := k8s.WaitForCompletion(ctx, cs, created.Namespace, created.Name)
 	if waitErr != nil {
 		return nil, fmt.Errorf("spawn.RunPod: wait: %w", waitErr)
+	}
+
+	// Logs are guaranteed available once the pod is terminal. Follow=false
+	// would be more honest, but we reuse StreamLogs to keep one code path;
+	// against a finished pod, follow=true returns immediately at EOF.
+	var raw []byte
+	stream, streamErr := k8s.StreamLogs(ctx, cs, created.Namespace, created.Name, "")
+	if streamErr == nil {
+		raw, _ = io.ReadAll(stream)
+		_ = stream.Close()
 	}
 
 	res := &PodResult{Pod: final}

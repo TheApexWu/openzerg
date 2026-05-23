@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:53:36Z (iter 0015)
+Last updated: 2026-05-23T18:11:45Z (iter 0019)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -35,8 +35,16 @@ See `RALPH_README.md` for state machine rules and update format.
     ./bin/openzerg run --target https://example.invalid --dry-run    -> planned-pod-spec preview, exit 0
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
-- status: IN_PROGRESS
-- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod + k8s.BuildClientset/CreatePod/DeletePod/WaitForCompletion/StreamLogs + spawn.RunPod + spawn.RunPods + cmd/openzerg run non-dry-run wiring (builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes); live-cluster smoke against DO still pending.
+- status: ACCEPTED
+- accepted_at: 2026-05-23T18:11:45Z
+- summary: client-go spawns 3 busybox stub pods in openzerg ns on DO cluster, streams logs, parses final JSON line, and deletes pods. RunAsUser/RunAsGroup pinned to 65532 so busybox passes RunAsNonRoot admission. All 3 results printed; zero leftover pods.
+- verify_evidence: |
+    cd backend && go build ./...  -> ok
+    cd backend && go vet ./...    -> ok
+    cd backend && go test ./...   -> ok (evolve, k8s, secrets, spawn)
+    ./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 1
+        -> [pod 0..2] {"type":"result",...} ; run: ok
+    kubectl -n openzerg get pods  -> No resources found (clean)
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
 - status: PENDING
@@ -73,3 +81,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0013 | 2026-05-23T17:49:46Z | M2 | progress | spawn.RunPod ties create/stream/wait/parse/delete for one pod; nil-guard tests; build/vet/test green
 - iter 0014 | 2026-05-23T17:51:42Z | M2 | progress | spawn.RunPods concurrent fan-out (sync.WaitGroup, ordered outcomes); 2 nil/empty tests; build/vet/test green
 - iter 0015 | 2026-05-23T17:53:36Z | M2 | progress | cmd/openzerg run non-dry-run wired: builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes; build/vet/test green
+- iter 0019 | 2026-05-23T18:11:45Z | M2 | accepted | live DO smoke green: 3/3 busybox stub pods spawn, emit JSON, parse, and delete; pinned RunAsUser=65532 to clear RunAsNonRoot admission

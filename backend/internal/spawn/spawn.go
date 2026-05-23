@@ -76,6 +76,12 @@ func BuildBusyboxPod(opts PodOptions) (*corev1.Pod, error) {
 	automount := false
 	nonRoot := true
 	allowEscalation := false
+	// Busybox does not ship a non-root user, but the kubelet enforces
+	// RunAsNonRoot by checking the container image's USER metadata OR a
+	// numeric RunAsUser. Pin a known non-zero UID/GID so the stub pods
+	// pass admission without needing a custom image. The real M3 attacker
+	// image will declare its own USER in the Dockerfile.
+	nonRootUID := int64(65532)
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -89,6 +95,8 @@ func BuildBusyboxPod(opts PodOptions) (*corev1.Pod, error) {
 			AutomountServiceAccountToken: &automount,
 			SecurityContext: &corev1.PodSecurityContext{
 				RunAsNonRoot: &nonRoot,
+				RunAsUser:    &nonRootUID,
+				RunAsGroup:   &nonRootUID,
 			},
 			Containers: []corev1.Container{{
 				Name:    "attacker",
@@ -103,6 +111,7 @@ func BuildBusyboxPod(opts PodOptions) (*corev1.Pod, error) {
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: &allowEscalation,
 					RunAsNonRoot:             &nonRoot,
+					RunAsUser:                &nonRootUID,
 				},
 			}},
 		},
