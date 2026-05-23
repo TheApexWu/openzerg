@@ -1328,6 +1328,18 @@ onEvent((event) => {
 });
 
 /* ---------- Subscriber: Defender Report drawer (CON-337) ---------- */
+// Rough exposure-per-category in USD — used for the drawer's risk-surface line.
+// Numbers are illustrative, calibrated to public IBM/Ponemon breach cost ranges
+// for the relevant attack class. Defender persona reads this as "order of magnitude".
+const EXPOSURE_BY_CATEGORY = {
+  filesystem: 80000,
+  privilege:  120000,
+  secrets:    200000,
+  network:    60000,
+  resource:   30000,
+};
+const TOTAL_VECTORS = 18;
+
 const REMEDIATIONS = {
   fs_symlink:         'AppArmor profile + readOnlyRootFilesystem',
   fs_proc_root:       'readOnlyRootFilesystem + drop CAP_SYS_PTRACE',
@@ -1367,9 +1379,14 @@ function renderDefenderDrawer(runCompleteEvent) {
   }
   const gens = runCompleteEvent?.generations ?? '—';
   const total = runCompleteEvent?.total ?? '—';
+  // Compute exposure estimate from unique breach categories
+  const exposureUsd = unique.reduce((sum, b) => sum + (EXPOSURE_BY_CATEGORY[b.category] || 50000), 0);
+  const exposureFmt = exposureUsd >= 1_000_000
+    ? '$' + (exposureUsd / 1_000_000).toFixed(1) + 'M'
+    : '$' + Math.round(exposureUsd / 1000) + 'k';
   const headerSummary = unique.length === 0
-    ? `<span class="drawer-summary"><b class="good">${total}</b> probes · <b class="good">0 breaches</b> · ${gens} generations · all contained</span>`
-    : `<span class="drawer-summary"><b class="bad">${unique.length} breach${unique.length === 1 ? '' : 'es'}</b> across ${gens} generations · ${total} probes · remediation list ↓</span>`;
+    ? `<span class="drawer-summary"><b class="good">${total}</b> probes · <b class="good">0 breaches</b> · ${gens} generations · <b class="good">0 of ${TOTAL_VECTORS}</b> vectors unaddressed · all contained</span>`
+    : `<span class="drawer-summary"><b class="bad">${unique.length} breach${unique.length === 1 ? '' : 'es'}</b> across ${gens} generations · <b class="bad">${unique.length} of ${TOTAL_VECTORS}</b> vectors unaddressed · est. exposure <b class="bad">${exposureFmt}</b></span>`;
 
   const body = unique.length === 0
     ? `<div class="drawer-empty">✓ ALL HELD — no remediation needed for this posture</div>`

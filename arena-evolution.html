@@ -52,7 +52,12 @@
     content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border);
   }
   .core-label { text-align: center; font-size: 11px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; }
-  .core-label b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 5px; letter-spacing: 0; }
+  .core-label b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px; letter-spacing: 0; }
+  .core-label .core-caption {
+    display: block; font-size: 9px; color: var(--muted);
+    letter-spacing: 0.16em; font-style: italic;
+    text-transform: none; margin-bottom: 8px;
+  }
 
   .probe {
     position: absolute; width: 12px; height: 12px;
@@ -99,7 +104,7 @@
   </div>
   <div class="arena" id="arena">
     <div class="core">
-      <div class="core-label"><b>AI Sandbox</b><span id="core-state">awaiting probes</span></div>
+      <div class="core-label"><b>AI Sandbox</b><span class="core-caption">the agent you're shipping</span><span id="core-state">awaiting probes</span></div>
     </div>
     <div class="footer-meta" id="footer-meta"></div>
   </div>
