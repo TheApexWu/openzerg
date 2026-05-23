@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:51:42Z (iter 0014)
+Last updated: 2026-05-23T17:53:36Z (iter 0015)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -36,7 +36,7 @@ See `RALPH_README.md` for state machine rules and update format.
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
 - status: IN_PROGRESS
-- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod + k8s.BuildClientset + k8s.CreatePod + k8s.DeletePod + k8s.WaitForCompletion + k8s.StreamLogs + spawn.RunPod + spawn.RunPods (concurrent fan-out via sync.WaitGroup, ordered outcomes); cmd/openzerg run wiring still TODO.
+- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod + k8s.BuildClientset/CreatePod/DeletePod/WaitForCompletion/StreamLogs + spawn.RunPod + spawn.RunPods + cmd/openzerg run non-dry-run wiring (builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes); live-cluster smoke against DO still pending.
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
 - status: PENDING
@@ -72,3 +72,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0011 | 2026-05-23T17:48:00Z | M2 | progress | k8s.StreamLogs (follow=true) returns io.ReadCloser; 2 fake-clientset tests; build/vet/test green
 - iter 0013 | 2026-05-23T17:49:46Z | M2 | progress | spawn.RunPod ties create/stream/wait/parse/delete for one pod; nil-guard tests; build/vet/test green
 - iter 0014 | 2026-05-23T17:51:42Z | M2 | progress | spawn.RunPods concurrent fan-out (sync.WaitGroup, ordered outcomes); 2 nil/empty tests; build/vet/test green
+- iter 0015 | 2026-05-23T17:53:36Z | M2 | progress | cmd/openzerg run non-dry-run wired: builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes; build/vet/test green
