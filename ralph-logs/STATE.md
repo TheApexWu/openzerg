@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:32:03Z (iter 0002)
+Last updated: 2026-05-23T17:35:24Z (iter 0003)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -24,8 +24,15 @@ See `RALPH_README.md` for state machine rules and update format.
     ./bin/openzerg version        -> "openzerg 0.1.0-dev"
 
 ### M1 — Config, secrets, doctor command
-- status: PENDING
-- summary: (not started)
+- status: ACCEPTED
+- accepted_at: 2026-05-23T17:35:24Z
+- summary: secrets/config/k8s probes implemented; doctor prints multi-line status; run --dry-run prints planned pod spec; tests green.
+- verify_evidence: |
+    cd backend && go build ./...                                    -> ok
+    cd backend && go vet ./...                                      -> ok
+    cd backend && go test ./...                                     -> ok (secrets + k8s)
+    ./bin/openzerg doctor                                            -> kubeconfig + secret report, exit 0
+    ./bin/openzerg run --target https://example.invalid --dry-run    -> planned-pod-spec preview, exit 0
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
 - status: PENDING
@@ -54,3 +61,4 @@ See `RALPH_README.md` for state machine rules and update format.
 <!-- Append one line per iteration. Format: -->
 <!-- - iter NNNN | ISO-timestamp | M<n> | progress|accepted|blocked | one-line note -->
 - iter 0002 | 2026-05-23T17:32:03Z | M0 | accepted | go module + package skeleton verified; build/vet green; binary prints version
+- iter 0003 | 2026-05-23T17:35:24Z | M1 | accepted | secrets loader + flags + kubeconfig probe; doctor and run --dry-run wired; tests green
