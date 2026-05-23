@@ -72,7 +72,9 @@
     position: absolute; width: 18px; height: 18px;
     transform: translate(-50%, -50%);
     border: 1px solid currentColor; background: currentColor; opacity: 0.55;
+    cursor: help;
   }
+  .scar:hover, .probe:hover { opacity: 1; }
 
   .footer-meta {
     position: absolute; bottom: 18px; left: 22px;
@@ -129,7 +131,7 @@
     return 0.0;
   }
 
-  function spawnProbe(pod, gen, category) {
+  function spawnProbe(pod, gen, category, vector) {
     if (probesByPod.has(pod)) return;
     const idx = probeIndex++;
     const probe = document.createElement('div');
@@ -141,13 +143,14 @@
     const sy = 50 + Math.sin(angle) * 43;
     probe.style.left = sx + '%';
     probe.style.top  = sy + '%';
+    probe.title = `${pod}\nvector: ${vector || '—'}\ncategory: ${category || '—'}\ngeneration: ${gen || 1}\nstatus: running`;
     arena.appendChild(probe);
     counters.probes++;
     hudP.textContent = counters.probes;
-    probesByPod.set(pod, { el: probe, angle });
+    probesByPod.set(pod, { el: probe, angle, gen, category, vector });
   }
 
-  function resolveProbe(pod, status, fitness) {
+  function resolveProbe(pod, status, fitness, evidence) {
     const p = probesByPod.get(pod);
     if (!p) return;
     const angle = p.angle;
@@ -158,6 +161,7 @@
     p.el.dataset.score = fitness.toFixed(2);
     p.el.style.color = color;
     p.el.style.background = color;
+    p.el.title = `${pod}\nvector: ${p.vector || '—'}\ncategory: ${p.category || '—'}\ngeneration: ${p.gen || 1}\nfitness: ${fitness.toFixed(2)}\nstatus: ${status}${evidence ? '\nevidence: ' + evidence : ''}`;
     requestAnimationFrame(() => {
       p.el.style.left = ex + '%';
       p.el.style.top  = ey + '%';
@@ -170,6 +174,7 @@
         scar.style.left = ex + '%';
         scar.style.top  = ey + '%';
         scar.style.color = color;
+        scar.title = `BREACH — ${p.vector || pod}\ncategory: ${p.category || '—'}\nfitness: ${fitness.toFixed(2)}${evidence ? '\nevidence: ' + evidence : ''}`;
         arena.appendChild(scar);
       }
       timers.push(setTimeout(() => { p.el.remove(); probesByPod.delete(pod); }, 260));
@@ -199,9 +204,9 @@
     const e = d.event;
     if (!e) return;
     if (e.type === 'started') {
-      spawnProbe(e.pod, e.generation || currentGen, e.category);
+      spawnProbe(e.pod, e.generation || currentGen, e.category, e.vector);
     } else if (e.type === 'result') {
-      resolveProbe(e.pod, e.status, fitnessFor(e));
+      resolveProbe(e.pod, e.status, fitnessFor(e), e.evidence);
     } else if (e.type === 'generation_start') {
       currentGen = e.generation || currentGen;
       coreState.textContent = 'generation ' + currentGen + ' active';

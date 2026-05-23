@@ -792,6 +792,54 @@ function stopLiveSource() {
   if (liveSocket) { try { liveSocket.close(); } catch {} liveSocket = null; }
 }
 
+// Synthesize generation_start / generation_complete / run_complete events
+// around a raw replay stream so the full pipeline (pill bar, drawer, arena
+// final state) lights up without re-authoring replay.json.
+function enrichReplayEvents(events) {
+  const ordered = [...events].sort((a, b) => (a.t || 0) - (b.t || 0));
+  const ops = ordered.filter(e => e.type === 'started' || e.type === 'result');
+  if (ops.length === 0) return ordered;
+  const GENS = 4;
+  const bucketSize = Math.ceil(ops.length / GENS);
+  const buckets = [];
+  for (let i = 0; i < GENS; i++) {
+    buckets.push(ops.slice(i * bucketSize, (i + 1) * bucketSize));
+  }
+  const enriched = [];
+  buckets.forEach((bucket, idx) => {
+    if (bucket.length === 0) return;
+    const gen = idx + 1;
+    const minT = Math.min(...bucket.map(e => e.t || 0));
+    const maxT = Math.max(...bucket.map(e => e.t || 0));
+    enriched.push({
+      type: 'generation_start', generation: gen,
+      population: bucket.length, t: Math.max(0, minT - 250),
+    });
+    // tag bucket events with their generation
+    bucket.forEach(e => enriched.push({ ...e, generation: e.generation || gen }));
+    // include log events whose t falls in this bucket window
+    ordered.filter(e => e.type === 'log' && (e.t || 0) >= minT && (e.t || 0) <= maxT)
+           .forEach(e => enriched.push({ ...e, generation: gen }));
+    const results = bucket.filter(e => e.type === 'result');
+    const breaches = results.filter(r => r.status === 'BREACH').length;
+    const survivors = results.length - breaches;
+    enriched.push({
+      type: 'generation_complete', generation: gen,
+      survivors, breaches, t: maxT + 350,
+    });
+  });
+  const totalBreaches = ops.filter(e => e.type === 'result' && e.status === 'BREACH').length;
+  const totalResults  = ops.filter(e => e.type === 'result').length;
+  const lastBucket = buckets.filter(b => b.length).length;
+  const lastT = Math.max(...ops.map(e => e.t || 0));
+  enriched.push({
+    type: 'run_complete', generations: lastBucket,
+    total: totalResults, breaches: totalBreaches, t: lastT + 900,
+  });
+  enriched.sort((a, b) => (a.t || 0) - (b.t || 0));
+  return enriched;
+}
+
 let replayLoopTimer = null;
 async function startReplaySource(path) {
   stopReplaySource();
@@ -801,14 +849,15 @@ async function startReplaySource(path) {
   try { data = await fetch(path).then(r => r.json()); }
   catch (e) { setMode('replay (load failed)', 'error'); console.error(e); return; }
   if (!Array.isArray(data)) { setMode('replay (bad data)', 'error'); return; }
+  // Enrich raw replay (started/log/result only) with generation + run_complete
+  const wasEnriched = data.some(e => e.type === 'generation_start' || e.type === 'run_complete');
+  if (!wasEnriched) data = enrichReplayEvents(data);
   setMode('REPLAY — ' + path, 'replay');
   appendLine('system', `▶ replay started: ${data.length} events`);
-  const t0 = performance.now();
   data.forEach((e) => {
     const delay = Math.max(0, e.t || 0);
     replayTimers.push(setTimeout(() => PaceQueue.push(normalizeEvent(e)), delay));
   });
-  // Heartbeat when finished
   const lastT = data.reduce((m, e) => Math.max(m, e.t || 0), 0);
   replayTimers.push(setTimeout(() => appendLine('system', '▶ replay complete'), lastT + 500));
 }
