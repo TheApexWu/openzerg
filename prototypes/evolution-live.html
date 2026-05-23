@@ -69,10 +69,42 @@
   .best .label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
 
   .arena { position: relative; flex: 1; margin: 0 14px 14px; border: 1px solid var(--border); background: #090a0c; overflow: hidden; }
-  .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 162px; height: 162px; display: grid; place-items: center; border: 1px solid #3f444c; background: #101216; }
-  .core::before { content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border); }
-  .core-label { text-align: center; font-size: 11px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; }
-  .core-label b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 5px; letter-spacing: 0; }
+  .core {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 162px; height: 162px;
+    border: 1px solid #3f444c; background: #101216;
+  }
+  .core::before {
+    content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border);
+  }
+  /* Label sits OUTSIDE the box so probes never collide with it. */
+  .core-caption {
+    position: absolute; left: 50%; top: 50%;
+    /* push down by half-core + dashed-inset + gap */
+    transform: translate(-50%, calc(81px + 16px + 18px));
+    text-align: center;
+    color: var(--muted);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .core-caption .name b { color: var(--ink); font-weight: 760; }
+  .core-caption .name .meta {
+    color: var(--muted); opacity: 0.6;
+    margin-left: 6px; font-weight: 600;
+    font-style: italic; letter-spacing: 0.08em; text-transform: none;
+  }
+  .core-caption .state {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px; letter-spacing: 0.22em; font-weight: 700;
+    color: var(--muted);
+  }
+  .core-caption .state.bad  { color: var(--bad); }
+  .core-caption .state.good { color: var(--good); }
   .probe { position: absolute; width: 12px; height: 12px; transform: translate(-50%, -50%); background: var(--green); transition: left 700ms var(--ease-in-out), top 700ms var(--ease-in-out), opacity 240ms var(--ease-out), transform 700ms var(--ease-in-out); }
   .probe::after { content: attr(data-score); position: absolute; left: 15px; top: -8px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .probe.hit { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
@@ -289,7 +321,11 @@
       <div class="best"><div class="score" id="best-score">0.00</div><div class="label">best fitness</div></div>
     </div>
     <div class="arena" id="arena">
-      <div class="core"><div class="core-label"><b>AI Sandbox</b><span id="core-state">deployment pending</span></div></div>
+      <div class="core"></div>
+      <div class="core-caption">
+        <span class="name"><b>AI Sandbox</b><span class="meta">the agent you're shipping</span></span>
+        <span class="state" id="core-state">deployment pending</span>
+      </div>
     </div>
   </main>
 
@@ -552,6 +588,7 @@
     $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
     $('best-score').textContent = '0.00'; $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = '—';
     $('core-state').textContent = 'deployment pending';
+    $('core-state').className = 'state';
     if (full) {
       $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
     }
@@ -655,11 +692,13 @@
       if (bestFitness >= 0.8) {
         setGate('BLOCKED', 'Deployment blocked by autonomous gate', `Best fitness ${bestFitness.toFixed(2)} exceeded policy threshold 0.80.`);
         $('core-state').textContent = 'blocked';
+        $('core-state').className = 'state bad';
         line('■ Datadog alert would fire: near-breach / breach fitness threshold exceeded', 'bad');
         line('■ ClickHouse stored generation scores for regression comparison', 'source');
       } else {
         setGate('CLEARED', 'Deployment cleared after convergence', `Four generations converged below policy threshold. Best fitness ${bestFitness.toFixed(2)}.`);
         $('core-state').textContent = 'cleared';
+        $('core-state').className = 'state good';
         line('■ convergence reached — no breach path survived mutation', 'good');
         line('■ ClickHouse stored clean run as hardened baseline', 'source');
       }
