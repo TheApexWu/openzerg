@@ -69,3 +69,37 @@ func TestCreatePodDuplicateRejected(t *testing.T) {
 		t.Fatal("expected AlreadyExists error on second create")
 	}
 }
+
+func TestDeletePodHappyPath(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	pod := newTestPod("openzerg", "kill-me")
+	if _, err := CreatePod(context.Background(), cs, pod); err != nil {
+		t.Fatalf("seed CreatePod: %v", err)
+	}
+	if err := DeletePod(context.Background(), cs, "openzerg", "kill-me"); err != nil {
+		t.Fatalf("DeletePod: %v", err)
+	}
+	if _, err := cs.CoreV1().Pods("openzerg").Get(context.Background(), "kill-me", metav1.GetOptions{}); err == nil {
+		t.Fatal("expected pod to be gone after DeletePod")
+	}
+}
+
+func TestDeletePodNotFoundIsIdempotent(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	if err := DeletePod(context.Background(), cs, "openzerg", "ghost"); err != nil {
+		t.Fatalf("DeletePod on missing pod returned error: %v", err)
+	}
+}
+
+func TestDeletePodValidatesArgs(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	if err := DeletePod(context.Background(), nil, "openzerg", "x"); err == nil {
+		t.Fatal("expected error for nil clientset")
+	}
+	if err := DeletePod(context.Background(), cs, "", "x"); err == nil {
+		t.Fatal("expected error for empty namespace")
+	}
+	if err := DeletePod(context.Background(), cs, "openzerg", ""); err == nil {
+		t.Fatal("expected error for empty name")
+	}
+}
