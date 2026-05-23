@@ -28,9 +28,31 @@
   .app { height: 100vh; padding: 16px; display: grid; gap: 1px; grid-template-columns: 300px minmax(460px, 1fr) 360px; grid-template-rows: auto 1fr auto; background: var(--border); }
   .topbar, .panel, .gate { background: var(--panel); }
   .topbar { grid-column: 1 / -1; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
-  .brand { display: flex; align-items: center; gap: 8px; }
-  .mark { width: 32px; height: 32px; background: transparent url('../zerg.svg') no-repeat center/contain; }
-  h1 { margin: 0; font-size: 18px; letter-spacing: -0.025em; font-weight: 720; line-height: 1; }
+  .brand { display: flex; align-items: center; gap: 4px; }
+  .mark { width: 34px; height: 34px; background: transparent url('../zerg.svg') no-repeat center/contain; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; font-weight: 760; line-height: 1; }
+  .run-counter {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    margin-left: 16px; padding-left: 16px;
+    border-left: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  .run-counter-label {
+    color: var(--muted); font-size: 10px;
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+  }
+  .run-counter-num {
+    color: var(--ink); font-size: 16px; font-weight: 760; letter-spacing: -0.02em;
+  }
+  .run-counter-status {
+    color: var(--muted); font-size: 11px;
+    letter-spacing: 0.06em; font-weight: 600;
+    margin-left: 4px; padding: 2px 7px;
+    border: 1px solid var(--border);
+  }
+  .run-counter-status.active   { color: var(--warn);  border-color: #5b4a1d; background: #1a1408; }
+  .run-counter-status.complete { color: var(--good);  border-color: #14532d; background: #07140d; }
+  .run-counter-status.blocked  { color: var(--bad);   border-color: #7f1d1d; background: #1c0d0d; }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .actions { display: flex; gap: 8px; align-items: center; }
 
@@ -245,11 +267,16 @@
     <div class="brand">
       <div class="mark"></div>
       <h1>OpenZerg</h1>
+      <span class="run-counter" id="run-counter" aria-live="polite">
+        <span class="run-counter-label">runs</span>
+        <span class="run-counter-num" id="run-counter-num">0</span>
+        <span class="run-counter-status" id="run-counter-status">idle</span>
+      </span>
     </div>
     <div class="actions">
       <button id="btn-refresh">Refresh data</button>
       <button id="btn-history">History</button>
-      <button id="btn-reset">Reset</button>
+      <button id="btn-reset">Clear lineages</button>
       <button id="btn-hardened">Run hardened config</button>
       <button id="btn-run" class="primary">Run evolution</button>
     </div>
@@ -491,17 +518,48 @@
     $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'demo stream';
   }
 
-  function reset() {
+  function clearLineages() {
+    // Explicit user action — wipes the corpus too.
+    runs = []; runSeq = 1;
+    agents = [];
+    runResetVisuals(true);
+    updateRunCounter('idle');
+    renderHistory(); renderSaved();
+  }
+
+  function runResetVisuals(full = false) {
     timers.forEach(clearTimeout); timers = [];
     [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
-    logs.innerHTML = ''; eventCount = 0; bestFitness = 0; chEvents = 0; agents = [];
+    logs.innerHTML = ''; eventCount = 0; bestFitness = 0; chEvents = 0;
     $('log-badge').textContent = '0'; $('loop-badge').textContent = 'idle';
     document.getElementById('logs-meta').classList.add('hidden');
     $('gen-num').textContent = '—'; $('gen-title').textContent = 'Waiting for container spin-up';
     $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
-    $('best-score').textContent = '0.00'; $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
-    $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = 'demo'; $('core-state').textContent = 'deployment pending';
+    $('best-score').textContent = '0.00'; $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = 'demo';
+    $('core-state').textContent = 'deployment pending';
+    if (full) {
+      $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
+    }
     setGate('PENDING', 'Deployment gate armed', 'No human approves the deployment. The swarm decides from fitness evidence.');
+  }
+
+  function updateRunCounter(status) {
+    // status: 'idle' | 'active' | 'complete' | 'blocked'
+    const n = runs.length;
+    $('run-counter-num').textContent = n;
+    const el = $('run-counter-status');
+    el.className = 'run-counter-status ' + (status === 'idle' ? '' : status);
+    el.textContent = status === 'active'   ? 'in progress'
+                   : status === 'complete' ? 'complete'
+                   : status === 'blocked'  ? 'blocked'
+                   :                         'idle';
+  }
+
+  function reset() {
+    // "Soft" reset — clears the visual arena + logs for the next run.
+    // Does NOT clear saved lineages (the regression corpus) or run history;
+    // use Clear lineages in the topbar for that.
+    runResetVisuals(false);
     renderSaved();
   }
 
@@ -547,6 +605,7 @@
 
   function runEvolution(isHardened = false) {
     reset(); hardened = isHardened;
+    updateRunCounter('active');
     $('loop-badge').textContent = isHardened ? 'hardened run' : 'autonomous run';
     $('core-state').textContent = isHardened ? 'hardened config' : 'permissive config';
     line('▶ container spin-up detected — OpenZerg starts without human approval', 'source');
@@ -597,13 +656,14 @@
       const decision = bestFitness >= 0.8 ? 'BLOCKED' : 'CLEARED';
       runs.push({ id: `run-${runSeq++}`, name: `${isHardened ? 'Hardened' : 'Permissive'} run`, best: bestFitness, decision, agents: agents.length, saved: agents.filter(a => a.saved).length, time: new Date().toLocaleTimeString() });
       renderHistory();
+      updateRunCounter(decision === 'BLOCKED' ? 'blocked' : 'complete');
       $('loop-badge').textContent = 'complete';
     }, t + 300));
   }
 
   $('btn-run').onclick = () => runEvolution(false);
+  $('btn-reset').onclick = clearLineages;
   $('btn-hardened').onclick = () => runEvolution(true);
-  $('btn-reset').onclick = reset;
   $('btn-refresh').onclick = refreshData;
   $('btn-history').onclick = () => setRightView(viewMode === 'history' ? 'log' : 'history');
   document.querySelectorAll('.right .tab').forEach(t => {
