@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:35:24Z (iter 0003)
+Last updated: 2026-05-23T17:37:13Z (iter 0004)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -35,8 +35,8 @@ See `RALPH_README.md` for state machine rules and update format.
     ./bin/openzerg run --target https://example.invalid --dry-run    -> planned-pod-spec preview, exit 0
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
-- status: PENDING
-- summary: (not started)
+- status: IN_PROGRESS
+- summary: evolve.ParseLastJSONLine implemented with hostile-input tests; client-go pod spawn still TODO.
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
 - status: PENDING
@@ -62,3 +62,4 @@ See `RALPH_README.md` for state machine rules and update format.
 <!-- - iter NNNN | ISO-timestamp | M<n> | progress|accepted|blocked | one-line note -->
 - iter 0002 | 2026-05-23T17:32:03Z | M0 | accepted | go module + package skeleton verified; build/vet green; binary prints version
 - iter 0003 | 2026-05-23T17:35:24Z | M1 | accepted | secrets loader + flags + kubeconfig probe; doctor and run --dry-run wired; tests green
+- iter 0004 | 2026-05-23T17:37:13Z | M2 | progress | evolve.ParseLastJSONLine + hostile-input tests; client-go spawn next
