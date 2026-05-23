@@ -506,9 +506,15 @@
   .controls button.text-launch-btn[data-category="resource"]   { color: var(--res);  border-color: var(--border); }
   .controls button.text-launch-btn:hover { border-color: currentColor; }
 
-  /* Toggle launch UI flavour based on the SKIN aesthetic */
-  body[data-aesthetic="ra2"]      .launch-tactical { display: none; }
-  body[data-aesthetic="tactical"] .launch-ra2      { display: none; }
+  /* Dev-X mode: hide the gamey RA2 UI from the footer.
+     Char thumbnails, SKIN aesthetic toggle, and AUDIO controls are
+     consumer-demo UI; they don't belong in a developer experience. */
+  .controls .launch-ra2,
+  .controls .group:has(> .aesthetic-btn),
+  .controls .group:has(> .audio-btn) { display: none !important; }
+  /* Tactical text launches always show (no longer gated by SKIN attr) */
+  body[data-aesthetic="ra2"] .launch-tactical,
+  body[data-aesthetic="tactical"] .launch-tactical { display: flex !important; }
   .controls .char-btn[data-category="filesystem"]:hover { border-color: var(--fs); }
   .controls .char-btn[data-category="network"]:hover    { border-color: var(--net); }
   .controls .char-btn[data-category="privilege"]:hover  { border-color: var(--priv); }
