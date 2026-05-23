@@ -2,7 +2,7 @@
 
 STATUS: DONE
 
-Last updated: 2026-05-23T19:44:31Z (M6 accepted — Nimble integration live)
+Last updated: 2026-05-23T19:46:00Z (all milestones M0-M6 ACCEPTED; STATUS flipped to DONE)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -130,3 +130,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0024 | 2026-05-23T19:15:00Z | M5 | accepted | legacy Python + HTML/Phaser artifacts removed; README + DEMO + ARCHITECTURE present; sanitized sample at docs/sample-summary/; build/vet/test green.
 - user  ---- | 2026-05-23T19:25:00Z | ALL | reorder  | user moved Nimble to M6; M4=Evolution, M5=Cleanup, M6=Nimble (pending). Existing ACCEPTED milestones preserved; only labels remapped.
 - iter 0027 | 2026-05-23T19:44:31Z | M6 | accepted | Nimble live: rebuilt pi-attacker image with nimble_fetch + REQUIRES_NIMBLE prompt; pop-3 smoke BREACHed gen1 sqli_login AND pod 2 invoked nimble on /#/administration (used_nimble:true on raw_findings); summary writer attributes nimble usage; --disable-nimble path produces clean run with no nimble calls; all M0-M6 ACCEPTED -> STATUS: DONE.
+- iter 0030 | 2026-05-23T19:46:00Z | ALL | accepted | verified all M0-M6 already ACCEPTED; flipped top-of-file STATUS from PROGRESS to DONE per RALPH_README rule.
