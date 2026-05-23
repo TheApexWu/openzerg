@@ -296,16 +296,16 @@
     <header><span class="eyebrow">Data sources</span><span class="badge" id="source-badge">probing</span></header>
     <div class="sources">
       <article class="source-card">
-        <div class="source-head"><span class="source-name">ClickHouse</span><span class="pill demo" id="ch-status">demo</span></div>
+        <div class="source-head"><span class="source-name">ClickHouse</span><span class="pill" id="ch-status">probing</span></div>
         <div class="source-copy">Probe telemetry, fitness history, and generation aggregates. Auth should run server-side via local proxy or ClickHouse Cloud credentials.</div>
         <div class="metric"><span>events written</span><b id="ch-events">0</b></div>
         <div class="metric"><span>best fitness</span><b id="ch-best">0.00</b></div>
       </article>
       <article class="source-card">
-        <div class="source-head"><span class="source-name">Nimble</span><span class="pill demo" id="nimble-status">demo</span></div>
+        <div class="source-head"><span class="source-name">Nimble</span><span class="pill" id="nimble-status">probing</span></div>
         <div class="source-copy">Live web/CVE intelligence seeds Generation 1 genomes, then survivors mutate around the most promising weaknesses.</div>
         <div class="metric"><span>CVE seeds</span><b id="nimble-seeds">0</b></div>
-        <div class="metric"><span>freshness</span><b id="nimble-fresh">demo</b></div>
+        <div class="metric"><span>freshness</span><b id="nimble-fresh">—</b></div>
       </article>
       <article class="source-card">
         <div class="source-head"><span class="source-name">Deployment policy</span><span class="pill">gate</span></div>
@@ -525,7 +525,7 @@
       const r = await fetch('/api/integrations/nimble', { cache: 'no-store' });
       if (r.ok) { $('nimble-status').textContent = 'live'; $('nimble-status').className = 'pill live'; liveCount++; }
     } catch {}
-    $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'demo stream';
+    $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'awaiting feeds';
   }
 
   // ---- Run queue: never interrupt an in-flight run; chain instead. ----
@@ -580,7 +580,7 @@
     document.getElementById('logs-meta').classList.add('hidden');
     $('gen-num').textContent = '—'; $('gen-title').textContent = 'Waiting for container spin-up';
     $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
-    $('best-score').textContent = '0.00'; $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = 'demo';
+    $('best-score').textContent = '0.00'; $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = '—';
     $('core-state').textContent = 'deployment pending';
     if (full) {
       $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
