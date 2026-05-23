@@ -298,7 +298,7 @@
       </div>
     </header>
     <div class="logs-wrap" id="logs-wrap">
-      <div class="logs-meta">
+      <div class="logs-meta hidden" id="logs-meta">
         <span class="logs-meta-label">events</span>
         <span class="logs-meta-count" id="log-badge">0</span>
       </div>
@@ -467,7 +467,8 @@
     logs.appendChild(div);
     logs.scrollTop = logs.scrollHeight;
     eventCount++;
-    $('log-badge').textContent = `${eventCount} events`;
+    $('log-badge').textContent = eventCount;
+    document.getElementById('logs-meta').classList.remove('hidden');
   }
 
   function setGate(status, title, copy) {
@@ -494,7 +495,8 @@
     timers.forEach(clearTimeout); timers = [];
     [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
     logs.innerHTML = ''; eventCount = 0; bestFitness = 0; chEvents = 0; agents = [];
-    $('log-badge').textContent = '0 events'; $('loop-badge').textContent = 'idle';
+    $('log-badge').textContent = '0'; $('loop-badge').textContent = 'idle';
+    document.getElementById('logs-meta').classList.add('hidden');
     $('gen-num').textContent = '—'; $('gen-title').textContent = 'Waiting for container spin-up';
     $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
     $('best-score').textContent = '0.00'; $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
