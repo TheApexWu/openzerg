@@ -110,8 +110,8 @@
     font-size: 10px; letter-spacing: 0.22em; font-weight: 700;
     color: var(--muted);
   }
-  .core-caption .state.bad  { color: var(--bad); }
-  .core-caption .state.good { color: var(--good); }
+  .core-caption .state.bad  { color: var(--red); }
+  .core-caption .state.good { color: var(--green); }
   .probe { position: absolute; width: 12px; height: 12px; transform: translate(-50%, -50%); background: var(--green); transition: left 700ms var(--ease-in-out), top 700ms var(--ease-in-out), opacity 240ms var(--ease-out), transform 700ms var(--ease-in-out); }
   .probe::after { content: attr(data-score); position: absolute; left: 15px; top: -8px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .probe.hit { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
