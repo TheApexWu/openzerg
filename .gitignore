@@ -13,6 +13,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+hidden/
 
 # Local briefs / generated docs / asset bundles used during hackathon prep.
 OPENZERG_DOCS.md
@@ -41,3 +42,10 @@ dist/
 # Logs
 *.log
 npm-debug.log*
+
+# Go build artifacts and run outputs
+./out/
+./bin/
+backend/bin/
+backend/out/
+*.exe
