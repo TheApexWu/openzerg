@@ -139,6 +139,11 @@
 
   function spawnProbe(pod, gen, category, vector) {
     if (probesByPod.has(pod)) return;
+    // Lift the "awaiting probes" label as soon as anything arrives —
+    // covers timing races where started events outrun generation_start.
+    if (coreState.textContent === 'awaiting probes') {
+      coreState.textContent = 'generation ' + (gen || currentGen || 1) + ' active';
+    }
     const idx = probeIndex++;
     const probe = document.createElement('div');
     probe.className = 'probe';
@@ -159,6 +164,10 @@
   function resolveProbe(pod, status, fitness, evidence) {
     const p = probesByPod.get(pod);
     if (!p) return;
+    // Same safety: if results arrived before any gen event, lift the label.
+    if (coreState.textContent === 'awaiting probes') {
+      coreState.textContent = 'under attack';
+    }
     const angle = p.angle;
     const innerR = status === 'BREACH' ? 4 : 13 + (1 - fitness) * 15;
     const ex = 50 + Math.cos(angle) * innerR;
