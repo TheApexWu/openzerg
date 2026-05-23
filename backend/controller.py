@@ -22,6 +22,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+# Lapdog / Datadog LLM observability (optional — degrades gracefully)
+try:
+    from ddtrace.llmobs import LLMObs
+    from ddtrace import tracer as dd_tracer
+    LLMObs.enable(ml_app="openzerg", agentless_enabled=True)
+    LAPDOG_ENABLED = True
+except Exception:
+    LAPDOG_ENABLED = False
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -202,7 +211,19 @@ Return exactly {min(len(survivors) * 2, 15)} mutated probe configs as a JSON arr
 Each object must have: vector (string), category (string), params (object with target_path and technique keys).
 Escalate mutations based on what partially worked. Return JSON array only. No explanation."""
 
+    mutations = []
+    t0 = time.time()
+
+    # Lapdog: trace the Gemma LLM call as a span visible in localhost:9000
+    ctx = (LLMObs.llm(model_name="gemma:2b", model_provider="ollama", name="gemma_mutate")
+           if LAPDOG_ENABLED else None)
     try:
+        if ctx:
+            span = ctx.__enter__()
+            LLMObs.annotate(span,
+                input_data=[{"role": "user", "content": prompt}],
+                metadata={"generation": generation, "survivors": len(survivors)})
+
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"{OLLAMA_URL}/api/generate",
@@ -211,32 +232,64 @@ Escalate mutations based on what partially worked. Return JSON array only. No ex
         data = resp.json()
         raw = data.get("response", "[]")
         mutations = json.loads(raw) if isinstance(raw, str) else raw
-        if isinstance(mutations, list) and len(mutations) > 0:
-            return mutations
+        if not (isinstance(mutations, list) and len(mutations) > 0):
+            mutations = []
+
+        if ctx and span:
+            LLMObs.annotate(span,
+                output_data=[{"role": "assistant", "content": raw[:500]}],
+                metadata={"mutation_count": len(mutations), "latency_ms": int((time.time() - t0) * 1000)})
+            ctx.__exit__(None, None, None)
+
     except Exception as e:
         print(f"[gemma_mutate] fallback to manual mutation: {e}")
+        if ctx:
+            try:
+                ctx.__exit__(type(e), e, None)
+            except Exception:
+                pass
 
-    # Fallback: manual mutation of survivors if Gemma fails
-    return [mutate(s) for s in survivors[:8]]
+    if not mutations:
+        # Fallback: manual mutation of survivors if Gemma fails
+        return [mutate(s) for s in survivors[:8]]
+    return mutations
 
 # ---------------------------------------------------------------------------
 # Nimble CVE seeding
 # ---------------------------------------------------------------------------
 async def fetch_live_cve_seeds() -> list[dict]:
+    """Pull live CVEs from CISA KEV catalog via Nimble Extract API."""
     if not NIMBLE_API_KEY:
         return []
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                "https://sdk.nimbleway.com/v1/search",
-                headers={"Authorization": f"Bearer {NIMBLE_API_KEY}"},
+                "https://sdk.nimbleway.com/v1/extract",
+                headers={
+                    "Authorization": f"Bearer {NIMBLE_API_KEY}",
+                    "Content-Type": "application/json",
+                },
                 json={
-                    "query": "kubernetes container escape CVE 2025 2026 site:nvd.nist.gov OR site:cisa.gov",
-                    "limit": 5,
+                    "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+                    "render": False,
                 },
             )
-        results = resp.json().get("results", [])
-        return [{"cve": r.get("title", ""), "summary": r.get("snippet", "")} for r in results]
+        data = resp.json()
+        # CISA KEV returns {"vulnerabilities": [{cveID, vulnerabilityName, shortDescription, ...}]}
+        vulns = data.get("vulnerabilities", []) or data.get("content", {}).get("vulnerabilities", [])
+        # Filter for container/kernel/privilege-relevant CVEs
+        keywords = {"container", "kernel", "privilege", "escape", "namespace", "cgroup", "kubernetes", "linux"}
+        seeds = []
+        for v in vulns:
+            desc = (v.get("shortDescription") or v.get("vulnerabilityName") or "").lower()
+            if any(kw in desc for kw in keywords):
+                seeds.append({
+                    "cve": v.get("cveID", ""),
+                    "summary": v.get("shortDescription") or v.get("vulnerabilityName") or "",
+                })
+            if len(seeds) >= 5:
+                break
+        return seeds
     except Exception as e:
         print(f"[nimble] CVE seed failed: {e}")
         return []
@@ -381,12 +434,31 @@ async def run_evolution(config: str = "permissive", vectors: list[str] | None = 
     if vectors:
         population = [a for a in population if a["vector"] in vectors]
 
-    # Seed Generation 1 with live CVE intel from Nimble
+    # Seed Generation 1 with live CVE intel from Nimble — inject as real probes
     cve_seeds = await fetch_live_cve_seeds()
     if cve_seeds:
+        CVE_VECTOR_MAP = {
+            "kernel": "meta_kernel_cve", "cgroup": "priv_cgroup_escape",
+            "privilege": "priv_capabilities", "network": "net_k8s_api",
+            "secret": "sec_sa_token", "filesystem": "fs_proc_root",
+        }
+        base_by_vector = {a["vector"]: a for a in population}
+        injected = 0
+        for seed in cve_seeds:
+            summary_lower = (seed.get("summary") or seed.get("cve") or "").lower()
+            target_vector = next(
+                (v for kw, v in CVE_VECTOR_MAP.items() if kw in summary_lower), "meta_kernel_cve"
+            )
+            if target_vector in base_by_vector:
+                clone = copy.deepcopy(base_by_vector[target_vector])
+                clone["pod_suffix"] = f"cve{injected}"
+                clone["evidence"] = f"CVE-seeded probe: {seed.get('cve', 'unknown')}"
+                clone["log_lines"] = [f"nimble seed: {seed.get('cve', '')} — {summary_lower[:80]}"]
+                population.append(clone)
+                injected += 1
         await broadcast({
             "type": "log", "pod": "nimble-scout",
-            "line": f"seeded with {len(cve_seeds)} live CVEs from NVD",
+            "line": f"injected {injected} CVE-seeded probes from NVD ({len(cve_seeds)} CVEs fetched)",
             "t": int(time.time() * 1000),
         })
 
