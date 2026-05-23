@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OpenZerg — Containment Map</title>
+
+<!--
+  ============================================================
+  ASSET MANIFEST — drop files into ./assets/{ra-2-sprites,audio,music}
+  Anything missing falls back gracefully to a procedural sprite
+  or silent audio. Demo still runs even if you have zero assets.
+  ============================================================
+
+  ./assets/ra-2-sprites/
+    command_center.png     HQ — Allied Construction Yard, chroma-keyed + cropped
+    battle_lab.png         Alt HQ option, chroma-keyed + cropped
+    engineer.png           Walk spritesheet, 76×80/frame, ~252 frames
+    spy.png                Walk spritesheet, 86×86/frame, ~201 frames
+    tanya.png              Walk spritesheet, 130×110/frame, ~617 frames
+    terror_drone.png       Walk spritesheet, 77×77/frame, ~87 frames
+    psi_comando.png        Walk spritesheet, 56×70/frame, ~314 frames (Yuri stand-in)
+
+    Source: cnc.fandom.com infantry wiki (.gif URLs serving animated WebP);
+    converted to horizontal PNG sprite sheets via PIL. Buildings from
+    spriters-resource.com; first frame extracted via Python (chroma-key + bbox).
+
+  ./assets/audio/   (mp3 or ogg, short clips < 2s)
+    spawn_filesystem.mp3   "Engineer reporting"
+    spawn_network.mp3      "Indeed" / spy ack
+    spawn_privilege.mp3    "Shake it baby"
+    spawn_resource.mp3     Terror drone chitter
+    spawn_secrets.mp3      "How do you do?"
+    impact_held.mp3        Allied Battle Lab "Operating"
+    impact_breach.mp3      EVA "We are under attack" / "Mission failed"
+
+  ./assets/music/   (Klepacki tracks, mp3)
+    hellmarch2.mp3   industrofunk.mp3   burn.mp3
+    power.mp3        grinder.mp3        trance.mp3
+
+  DO NOT commit ./assets/ to a public repo — gray-zone IP. .gitignore handles it.
+-->
+
+<script src="./vendor/phaser.min.js"></script>
+<style>
+  :root {
+    --bg: #030712;
+    --grid: #0b1220;
+    --ink: #e5e7eb;
+    --dim: #6b7280;
+    --accent: #38bdf8;
+    --hold: #4ade80;
+    --breach: #ef4444;
+    --fs: #f59e0b;
+    --net: #3b82f6;
+    --priv: #a855f7;
+    --res: #ec4899;
+    --sec: #14b8a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+               font-family: 'JetBrains Mono', 'Courier New', monospace; overflow: hidden; }
+
+  #openzerg-root { position: relative; width: 100%; height: 100%; min-width: 320px; min-height: 240px; }
+  #openzerg-canvas { position: absolute; inset: 0; }
+  #openzerg-canvas canvas { display: block; }
+
+  #openzerg-hud { position: absolute; top: 14px; left: 18px; z-index: 10;
+                  pointer-events: none; user-select: none; }
+  #openzerg-hud h2 { margin: 0; font-size: 18px; letter-spacing: 2px; color: var(--accent); }
+  .hud-stat { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .hud-stat b { color: var(--hold); }
+  .hud-stat .track { color: var(--accent); }
+
+  #openzerg-counters {
+    position: absolute; top: 14px; right: 18px; z-index: 10;
+    display: flex; gap: 14px; font-size: 11px; pointer-events: none;
+  }
+  #openzerg-counters .c { display: flex; flex-direction: column; align-items: flex-end; }
+  #openzerg-counters .v { font-size: 18px; font-weight: 700; }
+  #openzerg-counters .l { color: var(--dim); letter-spacing: 1px; }
+  .c.held .v   { color: var(--hold); }
+  .c.breach .v { color: var(--breach); }
+  .c.total .v  { color: var(--accent); }
+
+  #openzerg-controls {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    display: flex; gap: 6px; padding: 8px 10px; flex-wrap: wrap; justify-content: center;
+    background: #0b1220cc; border: 1px solid #1f2937;
+    border-radius: 8px; backdrop-filter: blur(4px); max-width: calc(100% - 24px);
+  }
+  #openzerg-controls button {
+    background: transparent; color: var(--ink);
+    border: 1px solid #1f2937; border-radius: 5px;
+    padding: 6px 10px; font-family: inherit; font-size: 11px;
+    letter-spacing: 1px; cursor: pointer; transition: all 0.12s;
+  }
+  #openzerg-controls button:hover { transform: translateY(-1px); }
+  #openzerg-controls button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  #openzerg-controls .fs   { color: var(--fs);   border-color: var(--fs); }
+  #openzerg-controls .net  { color: var(--net);  border-color: var(--net); }
+  #openzerg-controls .priv { color: var(--priv); border-color: var(--priv); }
+  #openzerg-controls .res  { color: var(--res);  border-color: var(--res); }
+  #openzerg-controls .sec  { color: var(--sec);  border-color: var(--sec); }
+  #openzerg-controls .toggle { color: var(--dim); border-color: #1f2937; min-width: 76px; }
+  #openzerg-controls .toggle[data-mode="BREACH"] { color: var(--breach); border-color: var(--breach); }
+  #openzerg-controls .toggle[data-mode="HELD"]   { color: var(--hold);   border-color: var(--hold); }
+  #openzerg-controls .toggle[data-mode="MIX"]    { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .swarm  { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .music  { color: var(--accent); border-color: var(--accent); min-width: 90px; }
+  #openzerg-controls .music.on { background: var(--accent); color: #030712; }
+  #openzerg-controls .next   { color: var(--accent); border-color: var(--accent); }
+  #openzerg-controls .sep { width: 1px; background: #1f2937; margin: 0 4px; align-self: stretch; }
+</style>
+</head>
+<body>
+<div id="openzerg-root">
+  <div id="openzerg-canvas"></div>
+
+  <div id="openzerg-hud">
+    <h2>OPENZERG // CONTAINMENT MAP</h2>
+    <div class="hud-stat">CLUSTER: <b>kind-openzerg</b> &nbsp; WS: <b id="oz-ws">offline</b></div>
+    <div class="hud-stat">TRACK: <span class="track" id="oz-track">— silent —</span></div>
+  </div>
+
+  <div id="openzerg-counters">
+    <div class="c total"><div class="v" id="oz-c-total">0</div><div class="l">PROBES</div></div>
+    <div class="c held"><div class="v" id="oz-c-held">0</div><div class="l">HELD</div></div>
+    <div class="c breach"><div class="v" id="oz-c-breach">0</div><div class="l">BREACH</div></div>
+  </div>
+
+  <div id="openzerg-controls">
+    <button class="fs"   onclick="OpenZerg.ping('filesystem')">FS</button>
+    <button class="net"  onclick="OpenZerg.ping('network')">NET</button>
+    <button class="priv" onclick="OpenZerg.ping('privilege')">PRIV</button>
+    <button class="sec"  onclick="OpenZerg.ping('secrets')">SEC</button>
+    <button class="res"  onclick="OpenZerg.ping('resource')">RES</button>
+    <button class="swarm" onclick="OpenZerg.swarm(20)">SWARM x20</button>
+    <button class="toggle" data-mode="MIX" id="oz-mode" onclick="OpenZerg.cycleMode()">MODE: MIX</button>
+    <div class="sep"></div>
+    <button class="music" id="oz-music" onclick="OpenZerg.toggleMusic()">MUSIC: OFF</button>
+    <button class="next"  id="oz-next"  onclick="OpenZerg.nextTrack()">NEXT ▸</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   OpenZerg — Containment Map
+   Phaser 3 scene + RA2 sprite/voice/soundtrack loader.
+   Falls back to procedural graphics if any asset is missing,
+   so the demo runs even with zero asset files present.
+   ============================================================ */
+(() => {
+  const ROOT = document.getElementById('openzerg-root');
+  const HOST = document.getElementById('openzerg-canvas');
+
+  /* -------- Asset manifest --------
+     Sprite entries are either:
+       - string  — single image (load.image)
+       - object  — spritesheet { sheet, frameWidth, frameHeight, frameRate, animFrames }
+                   animFrames caps the walk-anim length (wiki sheets concatenate
+                   multiple action cycles; first 16 read as a clean loop). */
+  const RA2_DIR = './assets/ra-2-sprites/';
+  const ASSETS = {
+    sprites: {
+      // Construction Yard with 33-frame damage progression. As breaches
+      // accumulate, the displayed frame steps from healthy → rubble.
+      sandboxBase:    { sheet: RA2_DIR + 'command_center_sheet.png',
+                        frameWidth: 228, frameHeight: 172, damageFrames: 33 },
+      atk_filesystem: { sheet: RA2_DIR + 'engineer.png',
+                        frameWidth: 76,  frameHeight: 80,  frameRate: 8,  animFrames: 16 },
+      atk_network:    { sheet: RA2_DIR + 'spy.png',
+                        frameWidth: 86,  frameHeight: 86,  frameRate: 8,  animFrames: 16 },
+      atk_privilege:  { sheet: RA2_DIR + 'tanya.png',
+                        frameWidth: 130, frameHeight: 110, frameRate: 8,  animFrames: 16 },
+      atk_resource:   { sheet: RA2_DIR + 'terror_drone.png',
+                        frameWidth: 77,  frameHeight: 77,  frameRate: 10, animFrames: 16 },
+      atk_secrets:    { sheet: RA2_DIR + 'psi_comando.png',
+                        frameWidth: 56,  frameHeight: 70,  frameRate: 8,  animFrames: 16 },
+      atk_conscript:  { sheet: RA2_DIR + 'conscript.png',
+                        frameWidth: 76,  frameHeight: 96,  frameRate: 8,  animFrames: 16 },
+      atk_gi:         { sheet: RA2_DIR + 'gi.png',
+                        frameWidth: 78,  frameHeight: 66,  frameRate: 8,  animFrames: 16 },
+    },
+    voices: {
+      spawn_filesystem:  './assets/audio/spawn_filesystem.mp3',
+      spawn_network:     './assets/audio/spawn_network.mp3',
+      spawn_privilege:   './assets/audio/spawn_privilege.mp3',
+      spawn_resource:    './assets/audio/spawn_resource.mp3',
+      spawn_secrets:     './assets/audio/spawn_secrets.mp3',
+      impact_held:       './assets/audio/impact_held.mp3',
+      impact_breach:     './assets/audio/impact_breach.mp3',
+    },
+    music: [
+      { name: 'Hell March 2', key: 'mus_hellmarch2', file: './assets/music/hellmarch2.mp3' },
+      { name: 'Industrofunk', key: 'mus_industrofunk', file: './assets/music/industrofunk.mp3' },
+      { name: 'Burn',         key: 'mus_burn',         file: './assets/music/burn.mp3' },
+      { name: 'Power',        key: 'mus_power',        file: './assets/music/power.mp3' },
+      { name: 'Grinder',      key: 'mus_grinder',      file: './assets/music/grinder.mp3' },
+      { name: 'Trance',       key: 'mus_trance',       file: './assets/music/trance.mp3' },
+    ],
+  };
+
+  /* -------- Category metadata -------- */
+  const CATEGORY = {
+    filesystem: { hex: 0xf59e0b, css: '#f59e0b', short: 'fs',   sprite: 'atk_filesystem', voice: 'spawn_filesystem' },
+    network:    { hex: 0x3b82f6, css: '#3b82f6', short: 'net',  sprite: 'atk_network',    voice: 'spawn_network' },
+    privilege:  { hex: 0xa855f7, css: '#a855f7', short: 'priv', sprite: 'atk_privilege',  voice: 'spawn_privilege' },
+    resource:   { hex: 0xec4899, css: '#ec4899', short: 'res',  sprite: 'atk_resource',   voice: 'spawn_resource' },
+    secrets:    { hex: 0x14b8a6, css: '#14b8a6', short: 'sec',  sprite: 'atk_secrets',    voice: 'spawn_secrets' },
+    unknown:    { hex: 0xffffff, css: '#ffffff', short: '???',  sprite: 'atk_filesystem', voice: null },
+  };
+
+  const VECTOR_LIBRARY = {
+    filesystem: ['fs_symlink', 'fs_proc_root', 'fs_etc_shadow', 'fs_mount_host'],
+    network:    ['net_egress', 'net_k8s_api', 'net_pod_to_pod', 'net_dns_exfil'],
+    privilege:  ['priv_root_check', 'priv_docker_sock', 'priv_nsenter', 'priv_caps'],
+    resource:   ['res_fork_bomb', 'res_mem_bomb', 'res_disk_fill', 'res_pid_max'],
+    secrets:    ['sec_sa_token', 'sec_envvar_scan', 'sec_var_run_secrets'],
+  };
+
+  /* -------- State -------- */
+  const state = {
+    counters: { total: 0, held: 0, breach: 0 },
+    mode: 'MIX',
+    scarTints: [],
+    loaded: { sprites: new Set(), voices: new Set(), music: new Set() },
+    voiceCooldownUntil: 0, // throttle so swarms don't overlap audio
+    music: { idx: 0, playing: false, current: null },
+    // 'ra2' = prefer loaded RA2 assets, fall back to procedural if missing
+    // 'tactical' = force procedural look + silence audio (legal-safe demo)
+    aesthetic: 'ra2',
+    audio: { musicEnabled: true, sfxEnabled: true },
+    // Set of anim keys registered for spritesheet sprites (e.g. 'atk_filesystem_walk')
+    registeredAnims: new Set(),
+    // Live entities that need to be torn down on reset.
+    active: { pods: new Set(), labels: new Set(), trails: new Set() },
+    // Reset epoch — bumped on every reset(). Tweens capture the epoch at
+    // spawn time and abort their onComplete if the epoch has moved.
+    resetEpoch: 0,
+  };
+
+  /* -------- Phaser config -------- */
+  const config = {
+    type: Phaser.AUTO,
+    parent: HOST,
+    transparent: true,
+    scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%',
+             autoCenter: Phaser.Scale.CENTER_BOTH },
+    physics: { default: 'arcade' },
+    scene: { preload, create },
+  };
+
+  let sceneRef, targetSandbox, baseGlow, gridLayer, scarFx;
+  const game = new Phaser.Game(config);
+
+  /* -------- Preload: sprites + audio with graceful fallback -------- */
+  function preload() {
+    // Track what loaded vs failed so create() picks real assets when present.
+    this.load.on('filecomplete', (key, type) => {
+      // Phaser fires type='spritesheet' for load.spritesheet, type='image'
+      // for load.image. Both end up as sprite-capable textures.
+      if (type === 'image' || type === 'spritesheet') state.loaded.sprites.add(key);
+      else if (type === 'audio') {
+        if (key.startsWith('mus_')) state.loaded.music.add(key);
+        else state.loaded.voices.add(key);
+      }
+    });
+    this.load.on('loaderror', (file) => {
+      console.debug('[OpenZerg] missing asset, falling back:', file.key, file.src);
+    });
+
+    // Sprites — string entries load as single images, objects as spritesheets.
+    for (const [key, entry] of Object.entries(ASSETS.sprites)) {
+      if (typeof entry === 'string') {
+        this.load.image(key, entry);
+      } else if (entry && entry.sheet) {
+        this.load.spritesheet(key, entry.sheet, {
+          frameWidth: entry.frameWidth, frameHeight: entry.frameHeight,
+        });
+      }
+    }
+    // Voices
+    for (const [key, url] of Object.entries(ASSETS.voices)) this.load.audio(key, url);
+    // Music
+    for (const m of ASSETS.music) this.load.audio(m.key, m.file);
+
+    // Always build procedural fallback textures under reserved keys.
+    buildProceduralTextures(this);
+  }
+
+  function buildProceduralTextures(scene) {
+    const g = scene.make.graphics({ add: false });
+
+    // Procedural sandbox base — RA2-flavored "Battle Lab" stand-in.
+    // 320×320 so it scales cleanly when stretched by placeBase.
+    const W = 320, H = 320;
+    g.clear();
+    // Allied steel-blue panel
+    g.fillStyle(0x0a1628, 1).fillRect(0, 0, W, H);
+    // Outer hard border + inner rim (RTS HQ vibe)
+    g.lineStyle(4, 0x38bdf8, 1).strokeRect(2, 2, W - 4, H - 4);
+    g.lineStyle(1, 0x1e40af, 0.7).strokeRect(16, 16, W - 32, H - 32);
+    // Diagonal slats — heavy industrial feel
+    g.lineStyle(1, 0x1e40af, 0.35);
+    for (let i = 28; i < W - 28; i += 14) {
+      g.lineBetween(i, 28, 28, i);
+      g.lineBetween(W - 28, i, i, H - 28);
+    }
+    // Inner courtyard panel
+    g.fillStyle(0x0f172a, 1).fillRect(60, 60, W - 120, H - 120);
+    g.lineStyle(2, 0x38bdf8, 0.55).strokeRect(60, 60, W - 120, H - 120);
+    // Core node
+    g.fillStyle(0x38bdf8, 0.85).fillRect(W / 2 - 22, H / 2 - 22, 44, 44);
+    g.lineStyle(1, 0xbae6fd, 1).strokeRect(W / 2 - 22, H / 2 - 22, 44, 44);
+    g.fillStyle(0xbae6fd, 0.9).fillCircle(W / 2, H / 2, 5);
+    // Corner brackets — military stencil look
+    const C = 22; // bracket length
+    g.lineStyle(3, 0x4ade80, 1);
+    // top-left
+    g.lineBetween(8, 8, 8 + C, 8); g.lineBetween(8, 8, 8, 8 + C);
+    // top-right
+    g.lineBetween(W - 8, 8, W - 8 - C, 8); g.lineBetween(W - 8, 8, W - 8, 8 + C);
+    // bottom-left
+    g.lineBetween(8, H - 8, 8 + C, H - 8); g.lineBetween(8, H - 8, 8, H - 8 - C);
+    // bottom-right
+    g.lineBetween(W - 8, H - 8, W - 8 - C, H - 8); g.lineBetween(W - 8, H - 8, W - 8, H - 8 - C);
+    g.generateTexture('proc_sandboxBase', W, H);
+
+    // Procedural attacker — RA2-engineer-ish chevron unit
+    g.clear();
+    // Body
+    g.fillStyle(0xffffff, 1);
+    g.beginPath();
+    g.moveTo(12, 0); g.lineTo(22, 8); g.lineTo(22, 18); g.lineTo(12, 24);
+    g.lineTo(2, 18); g.lineTo(2, 8); g.closePath();
+    g.fillPath();
+    // Visor strip
+    g.fillStyle(0x000000, 0.55).fillRect(4, 9, 16, 4);
+    // Faction pip (gets tinted at runtime)
+    g.fillStyle(0xffffff, 1).fillCircle(12, 17, 2);
+    g.generateTexture('proc_attacker', 24, 24);
+
+    // Spark
+    g.clear();
+    g.fillStyle(0xffffff, 1).fillCircle(3, 3, 3);
+    g.generateTexture('spark', 6, 6);
+  }
+
+  function pickSpriteKey(realKey, fallbackKey) {
+    if (state.aesthetic === 'tactical') return fallbackKey;
+    return state.loaded.sprites.has(realKey) ? realKey : fallbackKey;
+  }
+
+  function isSpritesheetEntry(key) {
+    const entry = ASSETS.sprites[key];
+    return entry && typeof entry === 'object' && entry.sheet;
+  }
+
+  function registerWalkAnims() {
+    // For each loaded spritesheet, register two anims:
+    //   <key>_walk — first N frames, looping (the marching cycle)
+    //   <key>_die  — last M frames, play-once (the death animation)
+    // RA2 wiki sheets typically concatenate idle/walk/attack/die in that
+    // rough order, so last-N is a reasonable first attempt for die. If a
+    // given unit's die looks wrong, per-unit dieFrames in the manifest
+    // overrides the default range.
+    for (const key of Object.keys(ASSETS.sprites)) {
+      if (!isSpritesheetEntry(key)) continue;
+      if (!state.loaded.sprites.has(key)) continue;
+      const entry = ASSETS.sprites[key];
+      const total = sceneRef.textures.get(key).frameTotal; // includes __BASE
+      const lastIndex = total - 2; // last real frame index
+
+      // Walk
+      const walkEnd = Math.min(entry.animFrames || 16, total - 1) - 1;
+      const walkKey = `${key}_walk`;
+      sceneRef.anims.create({
+        key: walkKey,
+        frames: sceneRef.anims.generateFrameNumbers(key, { start: 0, end: walkEnd }),
+        frameRate: Math.max(3, Math.round((entry.frameRate || 8) * 0.5)),
+        repeat: -1,
+      });
+      state.registeredAnims.add(walkKey);
+
+      // Die — last N frames, play once
+      const dieN = entry.dieFrames || 12;
+      const dieStart = Math.max(walkEnd + 1, lastIndex - dieN + 1);
+      if (dieStart < lastIndex) {
+        const dieKey = `${key}_die`;
+        sceneRef.anims.create({
+          key: dieKey,
+          frames: sceneRef.anims.generateFrameNumbers(key, { start: dieStart, end: lastIndex }),
+          frameRate: Math.round((entry.frameRate || 8) * 1.2),
+          repeat: 0,
+        });
+        state.registeredAnims.add(dieKey);
+      }
+    }
+  }
+
+  function audioGate(channel) {
+    // channel: 'music' | 'sfx'
+    if (state.aesthetic === 'tactical') return false;
+    if (channel === 'music') return state.audio.musicEnabled;
+    if (channel === 'sfx')   return state.audio.sfxEnabled;
+    return true;
+  }
+
+  /* -------- Scene boot -------- */
+  function create() {
+    sceneRef = this;
+    registerWalkAnims();
+    drawGrid();
+    placeBase();
+
+    this.scale.on('resize', (size) => {
+      if (!targetSandbox) return;
+      targetSandbox.setPosition(size.width / 2, size.height / 2);
+      baseGlow.setPosition(size.width / 2, size.height / 2);
+      const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+      const { w: fw, h: fh } = baseFootprint(baseKey);
+      const desired = Math.min(size.width, size.height) * 0.22;
+      targetSandbox.setScale(desired / Math.max(fw, fh));
+      baseGlow.setRadius(Math.min(size.width, size.height) * 0.18);
+      drawGrid();
+      repaintScars();
+    });
+
+    // Disable music UI if no tracks loaded.
+    const musicBtn = document.getElementById('oz-music');
+    const nextBtn  = document.getElementById('oz-next');
+    if (state.loaded.music.size === 0) {
+      musicBtn.disabled = true; nextBtn.disabled = true;
+      musicBtn.textContent = 'MUSIC: N/A';
+    }
+
+    connectEventSource();
+  }
+
+  function drawGrid() {
+    if (gridLayer) gridLayer.destroy();
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    gridLayer = sceneRef.add.graphics().setDepth(-10);
+    gridLayer.lineStyle(1, 0x0b1220, 1);
+    const step = 40;
+    for (let x = 0; x < w; x += step) gridLayer.lineBetween(x, 0, x, h);
+    for (let y = 0; y < h; y += step) gridLayer.lineBetween(0, y, w, y);
+  }
+
+  // Returns the visible footprint of the base sprite — frame dimensions for
+  // a spritesheet, source image dimensions for a single image.
+  function baseFootprint(baseKey) {
+    const entry = ASSETS.sprites.sandboxBase;
+    if (baseKey === 'sandboxBase' && entry && typeof entry === 'object') {
+      return { w: entry.frameWidth, h: entry.frameHeight };
+    }
+    const src = sceneRef.textures.get(baseKey).getSourceImage();
+    return { w: src.width, h: src.height };
+  }
+
+  function placeBase() {
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    const glowR = Math.min(w, h) * 0.18;
+    baseGlow = sceneRef.add.circle(w / 2, h / 2, glowR, 0x38bdf8, 0.05).setDepth(-1);
+    sceneRef.tweens.add({ targets: baseGlow, scale: 1.08, alpha: 0.12,
+                          duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+    targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
+    const { w: fw, h: fh } = baseFootprint(baseKey);
+    const desired = Math.min(w, h) * 0.22;
+    targetSandbox.setScale(desired / Math.max(fw, fh));
+    scarFx = sceneRef.add.graphics().setDepth(2);
+  }
+
+  // Step the Construction Yard damage frame in proportion to breach count.
+  // Wiki band 14 = 33 frames from intact → rubble. We cap at frame 24 so the
+  // building stays visually recognizable even after a heavy swarm — the last
+  // few frames are basically just scattered debris which read as broken.
+  function updateBaseDamage(breachCount) {
+    if (!targetSandbox) return;
+    if (state.aesthetic === 'tactical') return; // procedural base has no damage frames
+    const entry = ASSETS.sprites.sandboxBase;
+    if (!entry || typeof entry !== 'object' || !entry.damageFrames) return;
+    if (!state.loaded.sprites.has('sandboxBase')) return;
+    const MAX_FRAME = 24;
+    // 2 frames per breach: a 12-breach demo arc walks intact → ruined cleanly.
+    const idx = Math.max(0, Math.min(MAX_FRAME, breachCount * 2));
+    targetSandbox.setFrame(idx);
+  }
+
+  /* -------- Event source: postMessage when embedded, WebSocket when standalone -------- */
+  function connectEventSource() {
+    const wsLabel = document.getElementById('oz-ws');
+    const isEmbedded = (window.parent && window.parent !== window);
+
+    if (isEmbedded) {
+      // Shell drives via postMessage. Map is a pure renderer.
+      // Hide the in-iframe HUD + controls — the shell owns those now.
+      // Counters stay (shell doesn't have equivalents yet).
+      const hud = document.getElementById('openzerg-hud');
+      const ctrls = document.getElementById('openzerg-controls');
+      if (hud) hud.style.display = 'none';
+      if (ctrls) ctrls.style.display = 'none';
+
+      wsLabel.textContent = 'shell';
+      wsLabel.style.color = 'var(--accent)';
+      window.addEventListener('message', (msgEv) => {
+        const data = msgEv.data;
+        if (!data || !data.openzerg) return;
+        if (data.type === 'reset')    { window.OpenZerg.reset(); return; }
+        if (data.type === 'aesthetic'){ setAesthetic(data.mode);   return; }
+        if (data.type === 'music')    { setMusicEnabled(!!data.enabled); return; }
+        if (data.type === 'sfx')      { setSfxEnabled(!!data.enabled);   return; }
+        if (data.type === 'audioGesture') { tryUnlockAudio(); return; }
+        if (data.event) handleCanonicalEvent(data.event);
+      });
+      // Announce ready so shell can flush any queued events.
+      window.parent.postMessage({ openzerg: true, type: 'ready' }, '*');
+      return;
+    }
+
+    // Standalone: best-effort direct WebSocket. Used for solo testing.
+    let socket;
+    try { socket = new WebSocket('ws://localhost:8000/ws'); }
+    catch { wsLabel.textContent = 'offline'; return; }
+
+    socket.onopen    = () => { wsLabel.textContent = 'live'; wsLabel.style.color = 'var(--hold)'; };
+    socket.onclose   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
+    socket.onerror   = () => { wsLabel.textContent = 'offline'; wsLabel.style.color = 'var(--dim)'; };
+    socket.onmessage = (ev) => {
+      try { handleCanonicalEvent(JSON.parse(ev.data)); } catch (e) { console.error('OpenZerg parse', e); }
+    };
+  }
+
+  // Map only renders impact for 'result' events. Bare legacy payloads
+  // (no 'type' field but has 'status') are treated as result for back-compat.
+  function handleCanonicalEvent(event) {
+    if (!event) return;
+    if (event.type === 'result' || (!event.type && event.status)) {
+      processIncomingAttack(event);
+    }
+    // 'started' and 'log' events are the shell's other panels' concern.
+  }
+
+  /* -------- Attack lifecycle -------- */
+  function processIncomingAttack(payload) {
+    if (!sceneRef || !targetSandbox) return;
+    const cat = CATEGORY[payload.category] || CATEGORY.unknown;
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+
+    const edges = [
+      { x: Phaser.Math.Between(0, w), y: -30 },
+      { x: Phaser.Math.Between(0, w), y: h + 30 },
+      { x: -30, y: Phaser.Math.Between(0, h) },
+      { x: w + 30, y: Phaser.Math.Between(0, h) },
+    ];
+    const spawn = Phaser.Math.RND.pick(edges);
+
+    // Shell/manual events can request a specific RA2 unit sprite while keeping
+    // the category/result semantics unchanged. Live backend events that don't
+    // carry sprite fall back to the category's default unit.
+    const spriteId = (payload.sprite && ASSETS.sprites[payload.sprite]) ? payload.sprite : cat.sprite;
+    const spriteKey = pickSpriteKey(spriteId, 'proc_attacker');
+    const usingProc = (spriteKey === 'proc_attacker');
+    const pod = sceneRef.physics.add.sprite(spawn.x, spawn.y, spriteKey).setDepth(3);
+    if (usingProc) {
+      pod.setTint(cat.hex);
+    } else {
+      // For spritesheets, scale to frame footprint (not full sheet width).
+      const entry = ASSETS.sprites[spriteId];
+      let frameW, frameH;
+      if (entry && typeof entry === 'object') {
+        frameW = entry.frameWidth; frameH = entry.frameHeight;
+      } else {
+        const src = sceneRef.textures.get(spriteKey).getSourceImage();
+        frameW = src.width; frameH = src.height;
+      }
+      const desired = 220; // 5× larger RA2 infantry for stage readability
+      pod.setScale(desired / Math.max(frameW, frameH));
+      // Play walking animation if a spritesheet anim is registered for this unit.
+      const animKey = `${spriteId}_walk`;
+      if (state.registeredAnims.has(animKey)) pod.play(animKey);
+    }
+    state.active.pods.add(pod);
+
+    // Label + trail are debug-style affordances that read fine over a procedural
+    // diamond but feel like clutter over a real RA2 sprite. Only show them when
+    // we're rendering the procedural fallback.
+    let label = null, trail = null;
+    if (usingProc) {
+      label = sceneRef.add.text(spawn.x, spawn.y - 16,
+        `[${cat.short}] ${payload.vector || '???'}`,
+        { font: '10px monospace', color: cat.css, backgroundColor: '#000000bb',
+          padding: { x: 4, y: 2 } }).setDepth(4);
+      state.active.labels.add(label);
+      trail = sceneRef.add.particles(0, 0, 'spark', {
+        follow: pod, lifespan: 350, speed: 0, quantity: 1,
+        scale: { start: 0.6, end: 0 }, tint: cat.hex, blendMode: 'ADD', frequency: 30,
+      }).setDepth(2);
+      state.active.trails.add(trail);
+    }
+
+    playVoice(cat.voice);
+
+    const tx = targetSandbox.x + Phaser.Math.Between(-50, 50);
+    const ty = targetSandbox.y + Phaser.Math.Between(-50, 50);
+    const spawnEpoch = state.resetEpoch; // captured at spawn; reset bumps it
+
+    sceneRef.tweens.add({
+      targets: pod,
+      x: tx, y: ty,
+      duration: Phaser.Math.Between(2800, 4400),
+      ease: 'Quad.easeIn',
+      onUpdate: () => {
+        if (label) { label.x = pod.x - label.width / 2; label.y = pod.y - 18; }
+      },
+      onComplete: () => {
+        // Reset happened between spawn and impact — abort the impact entirely
+        // so reset state stays clean (no late scars, no late counter bumps).
+        if (spawnEpoch !== state.resetEpoch) return;
+        if (trail) { state.active.trails.delete(trail); trail.destroy(); }
+        if (label) { state.active.labels.delete(label); label.destroy(); }
+        triggerImpactFeedback(pod.x, pod.y, payload, cat);
+
+        // Impact cleanup. The raw RA2 sheets don't expose reliable per-unit
+        // death-frame ranges here; using the tail frames caused some units to
+        // appear to crawl after impact. Keep the walk animation for approach,
+        // then use a crisp white-flash burst on collision.
+        try { pod.anims.stop(); } catch {}
+        const startScale = pod.scaleX;
+        pod.setTint(0xffffff);
+        sceneRef.tweens.add({
+          targets: pod,
+          scaleX: startScale * 1.8,
+          scaleY: startScale * 1.8,
+          alpha: 0,
+          duration: 220,
+          ease: 'Cubic.easeOut',
+          onComplete: () => { state.active.pods.delete(pod); pod.destroy(); },
+        });
+      },
+    });
+  }
+
+  /* -------- Impact: per-category FX + status FX + voice -------- */
+  function triggerImpactFeedback(x, y, data, cat) {
+    bumpCounters(data.status);
+
+    if (data.status === 'BREACH') {
+      breachCommon(x, y, cat);
+      playImpactSound('BREACH');
+      playVoice('impact_breach');
+      updateBaseDamage(state.counters.breach);
+    } else {
+      heldCommon(x, y);
+      playImpactSound('HELD');
+      playVoice('impact_held');
+    }
+
+    switch (data.category) {
+      case 'resource':   fxForkBomb(x, y, cat, data.status); break;
+      case 'network':    fxLightning(x, y, cat, data.status); break;
+      case 'filesystem': fxFilesystem(x, y, cat, data.status); break;
+      case 'privilege':  fxPrivilege(x, y, cat, data.status); break;
+      case 'secrets':    fxSecrets(x, y, cat, data.status); break;
+    }
+  }
+
+  function heldCommon(x, y) {
+    const shield = sceneRef.add.circle(x, y, 18).setStrokeStyle(2, 0x22c55e).setDepth(5);
+    sceneRef.tweens.add({ targets: shield, scale: 2.2, alpha: 0, duration: 420,
+                          ease: 'Cubic.easeOut', onComplete: () => shield.destroy() });
+    const ping = sceneRef.add.circle(x, y, 4, 0x22c55e, 0.8).setDepth(5);
+    sceneRef.tweens.add({ targets: ping, scale: 5, alpha: 0, duration: 600,
+                          onComplete: () => ping.destroy() });
+  }
+
+  function breachCommon(x, y, cat) {
+    const flash = sceneRef.add.circle(x, y, 10, 0xef4444).setDepth(5);
+    sceneRef.tweens.add({ targets: flash, scale: 10, alpha: 0, duration: 500,
+                          onComplete: () => flash.destroy() });
+    // Brief red pulse on the base (clears itself) — the persistent damage now
+    // comes from the Construction Yard's own damage-state sprite frames.
+    if (targetSandbox) {
+      targetSandbox.setTint(0xff8888);
+      sceneRef.time.delayedCall(180, () => {
+        if (targetSandbox) targetSandbox.clearTint();
+      });
+    }
+    sceneRef.cameras.main.shake(180, 0.004);
+    state.scarTints.push({ dx: x - targetSandbox.x, dy: y - targetSandbox.y, hex: cat.hex });
+    // Cap visible scars so they don't smother the damage-frame sprite.
+    // FIFO drop oldest entries when the list grows beyond the cap.
+    const SCAR_CAP = 8;
+    while (state.scarTints.length > SCAR_CAP) state.scarTints.shift();
+    repaintScars();
+  }
+
+  function repaintScars() {
+    if (!scarFx) return;
+    scarFx.clear();
+    for (const s of state.scarTints) {
+      const cx = targetSandbox.x + s.dx, cy = targetSandbox.y + s.dy;
+      scarFx.lineStyle(2, 0xef4444, 0.9);
+      for (let i = 0; i < 4; i++) {
+        const a = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        scarFx.lineBetween(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4,
+                           cx + Math.cos(a) * 14, cy + Math.sin(a) * 14);
+      }
+      scarFx.fillStyle(s.hex, 0.6).fillCircle(cx, cy, 2);
+    }
+  }
+
+  /* -------- Category-specific FX (unchanged from v1) -------- */
+  function fxForkBomb(x, y, cat, status) {
+    const count = status === 'BREACH' ? 26 : 14;
+    for (let i = 0; i < count; i++) {
+      const dot = sceneRef.add.circle(x, y, 2, cat.hex).setDepth(6);
+      const ang = Math.random() * Math.PI * 2;
+      const dist = Phaser.Math.Between(40, 140);
+      sceneRef.tweens.add({
+        targets: dot, x: x + Math.cos(ang) * dist, y: y + Math.sin(ang) * dist,
+        scale: 0.2, alpha: 0, duration: Phaser.Math.Between(500, 900),
+        ease: 'Cubic.easeOut', onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  function fxLightning(x, y, cat) {
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    const dst = Phaser.Math.RND.pick([{ x: 0, y }, { x: w, y }, { x, y: 0 }, { x, y: h }]);
+    const bolt = sceneRef.add.graphics().setDepth(6);
+    bolt.lineStyle(2, cat.hex, 0.9);
+    bolt.beginPath(); bolt.moveTo(x, y);
+    const segments = 8;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      bolt.lineTo(Phaser.Math.Linear(x, dst.x, t) + Phaser.Math.Between(-14, 14),
+                  Phaser.Math.Linear(y, dst.y, t) + Phaser.Math.Between(-14, 14));
+    }
+    bolt.strokePath();
+    sceneRef.tweens.add({ targets: bolt, alpha: 0, duration: 350,
+                          onComplete: () => bolt.destroy() });
+  }
+
+  function fxFilesystem(x, y, cat) {
+    for (let i = 0; i < 5; i++) {
+      const bar = sceneRef.add.rectangle(x, y - 20 + i * 8,
+                    Phaser.Math.Between(20, 60), 2, cat.hex, 0.8).setDepth(6);
+      sceneRef.tweens.add({ targets: bar, x: x + Phaser.Math.Between(-60, 60),
+                            alpha: 0, duration: 400 + i * 60,
+                            onComplete: () => bar.destroy() });
+    }
+  }
+
+  function fxPrivilege(x, y, cat) {
+    const beam = sceneRef.add.rectangle(x, y, 6, 40, cat.hex, 0.85).setDepth(6);
+    sceneRef.tweens.add({ targets: beam, scaleY: 8, alpha: 0, duration: 500,
+                          ease: 'Quad.easeOut', onComplete: () => beam.destroy() });
+    for (let i = 0; i < 4; i++) {
+      const chev = sceneRef.add.triangle(x, y, 0, 8, 6, 0, 12, 8, cat.hex).setDepth(6);
+      sceneRef.tweens.add({ targets: chev, y: y - 30 - i * 14, alpha: 0,
+                            duration: 600, delay: i * 70,
+                            onComplete: () => chev.destroy() });
+    }
+  }
+
+  function fxSecrets(x, y, cat) {
+    const ring = sceneRef.add.circle(x, y, 6).setStrokeStyle(2, cat.hex).setDepth(6);
+    sceneRef.tweens.add({ targets: ring, scale: 4, alpha: 0, duration: 600,
+                          onComplete: () => ring.destroy() });
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+      const dot = sceneRef.add.circle(x, y, 2, cat.hex).setDepth(6);
+      sceneRef.tweens.add({
+        targets: dot,
+        x: Phaser.Math.Linear(x, targetSandbox.x, (i + 1) / steps),
+        y: Phaser.Math.Linear(y, targetSandbox.y, (i + 1) / steps),
+        alpha: 0, duration: 500, delay: i * 50,
+        onComplete: () => dot.destroy(),
+      });
+    }
+  }
+
+  /* -------- Audio: voices + music -------- */
+  function playImpactSound(status) {
+    // Procedural collision sound so impacts still have audio even when the
+    // optional RA2 voice assets are missing from ./assets/audio.
+    if (!audioGate('sfx')) return;
+    if (!sceneRef || !sceneRef.sound || !sceneRef.sound.context) return;
+    tryUnlockAudio();
+    const ctx = sceneRef.sound.context;
+    if (!ctx || ctx.state === 'suspended') return;
+
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    if (status === 'BREACH') {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + 0.16);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + 0.24);
+      osc.onended = () => { try { gain.disconnect(); } catch {} };
+    } else {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + 0.16);
+      osc.onended = () => { try { gain.disconnect(); } catch {} };
+    }
+  }
+
+  function playVoice(key) {
+    if (!audioGate('sfx')) return;
+    if (!key || !state.loaded.voices.has(key)) return;
+    const now = performance.now();
+    if (now < state.voiceCooldownUntil) return; // skip — voice currently playing
+    const snd = sceneRef.sound.add(key, { volume: 0.8 });
+    snd.once('complete', () => snd.destroy());
+    snd.play();
+    state.voiceCooldownUntil = now + 350; // short overlap floor; tune by ear
+  }
+
+  function startMusic(idx) {
+    if (!audioGate('music')) return;
+    if (state.loaded.music.size === 0) return;
+    const tracks = ASSETS.music.filter(t => state.loaded.music.has(t.key));
+    if (tracks.length === 0) return;
+    const track = tracks[idx % tracks.length];
+    stopMusic();
+    state.music.current = sceneRef.sound.add(track.key, { loop: true, volume: 0.45 });
+    state.music.current.play();
+    state.music.playing = true;
+    state.music.idx = idx;
+    document.getElementById('oz-track').textContent = track.name;
+    const btn = document.getElementById('oz-music');
+    btn.classList.add('on');
+    btn.textContent = 'MUSIC: ON';
+  }
+
+  function stopMusic() {
+    if (state.music.current) {
+      state.music.current.stop();
+      state.music.current.destroy();
+      state.music.current = null;
+    }
+    state.music.playing = false;
+    document.getElementById('oz-track').textContent = '— silent —';
+    const btn = document.getElementById('oz-music');
+    btn.classList.remove('on');
+    btn.textContent = 'MUSIC: OFF';
+  }
+
+  function toggleMusic() {
+    if (state.music.playing) stopMusic();
+    else startMusic(state.music.idx || 0);
+  }
+
+  /* -------- Aesthetic + audio toggles (driven by shell via postMessage) -------- */
+  function setAesthetic(mode) {
+    if (mode !== 'ra2' && mode !== 'tactical') return;
+    const changed = state.aesthetic !== mode;
+    state.aesthetic = mode;
+    if (mode === 'tactical' && state.music.playing) stopMusic();
+    // Always rebuild on signal — even same-mode clicks should be visibly
+    // responsive. Cheap operation, costs nothing if textures haven't changed.
+    try { rebuildBase(); }
+    catch (e) { console.error('[OpenZerg] rebuildBase failed', e); }
+    console.info('[OpenZerg] aesthetic =', mode, 'changed=', changed);
+  }
+
+  function setMusicEnabled(enabled) {
+    state.audio.musicEnabled = !!enabled;
+    if (enabled) {
+      tryUnlockAudio();
+      if (!state.music.playing && state.loaded.music.size > 0) {
+        startMusic(state.music.idx || 0);
+      }
+    } else if (state.music.playing) {
+      stopMusic();
+    }
+    const btn = document.getElementById('oz-music');
+    if (btn) btn.disabled = !enabled;
+  }
+
+  function tryUnlockAudio() {
+    // Browser autoplay policy: audio context may be suspended in an iframe
+    // even after a parent-window user gesture. Best-effort resume here.
+    if (sceneRef && sceneRef.sound && sceneRef.sound.context
+        && sceneRef.sound.context.state === 'suspended') {
+      sceneRef.sound.context.resume().catch(() => {});
+    }
+  }
+
+  function setSfxEnabled(enabled) {
+    state.audio.sfxEnabled = !!enabled;
+  }
+
+  function rebuildBase() {
+    if (!sceneRef) { console.warn('[OpenZerg] rebuildBase: no scene'); return; }
+    const w = sceneRef.scale.width, h = sceneRef.scale.height;
+    if (targetSandbox) { try { targetSandbox.destroy(); } catch (e) { console.warn('[OpenZerg] destroy old base', e); } }
+    const baseKey = pickSpriteKey('sandboxBase', 'proc_sandboxBase');
+    console.info('[OpenZerg] rebuildBase using', baseKey,
+                 '(loaded.sprites.has sandboxBase =', state.loaded.sprites.has('sandboxBase'), ')');
+    targetSandbox = sceneRef.physics.add.sprite(w / 2, h / 2, baseKey);
+    const { w: fw, h: fh } = baseFootprint(baseKey);
+    const desired = Math.min(w, h) * 0.22;
+    targetSandbox.setScale(desired / Math.max(fw, fh));
+    updateBaseDamage(state.counters.breach);
+    repaintScars();
+  }
+
+  function nextTrack() {
+    const tracks = ASSETS.music.filter(t => state.loaded.music.has(t.key));
+    if (tracks.length === 0) return;
+    const nextIdx = ((state.music.idx || 0) + 1) % tracks.length;
+    if (state.music.playing) startMusic(nextIdx);
+    else { state.music.idx = nextIdx;
+           document.getElementById('oz-track').textContent = tracks[nextIdx].name + ' (paused)'; }
+  }
+
+  /* -------- Counters -------- */
+  function bumpCounters(status) {
+    state.counters.total++;
+    if (status === 'BREACH') state.counters.breach++;
+    else state.counters.held++;
+    document.getElementById('oz-c-total').textContent = state.counters.total;
+    document.getElementById('oz-c-held').textContent  = state.counters.held;
+    document.getElementById('oz-c-breach').textContent = state.counters.breach;
+  }
+
+  /* -------- Public API -------- */
+  function mockPayload(category) {
+    const cat = CATEGORY[category] ? category : 'filesystem';
+    const vectors = VECTOR_LIBRARY[cat] || ['unknown'];
+    let status;
+    if (state.mode === 'BREACH') status = 'BREACH';
+    else if (state.mode === 'HELD') status = 'HELD';
+    else status = Math.random() < 0.35 ? 'BREACH' : 'HELD';
+    return {
+      vector: Phaser.Math.RND.pick(vectors),
+      category: cat,
+      status,
+      evidence: status === 'BREACH' ? 'exploit succeeded' : 'permission denied',
+      duration_ms: Phaser.Math.Between(80, 1600),
+    };
+  }
+
+  function cycleMode() {
+    const order = ['MIX', 'BREACH', 'HELD'];
+    state.mode = order[(order.indexOf(state.mode) + 1) % order.length];
+    const btn = document.getElementById('oz-mode');
+    btn.dataset.mode = state.mode;
+    btn.textContent = 'MODE: ' + state.mode;
+  }
+
+  function swarm(n = 20) {
+    const cats = Object.keys(VECTOR_LIBRARY);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => processIncomingAttack(mockPayload(Phaser.Math.RND.pick(cats))),
+                 i * 90);
+    }
+  }
+
+  window.OpenZerg = {
+    ping: (cat) => processIncomingAttack(mockPayload(cat)),
+    send: (payload) => processIncomingAttack(payload),
+    swarm,
+    cycleMode,
+    toggleMusic,
+    nextTrack,
+    setAesthetic,
+    setMusicEnabled,
+    setSfxEnabled,
+    state,
+    assetReport: () => ({
+      sprites_loaded: [...state.loaded.sprites],
+      voices_loaded: [...state.loaded.voices],
+      music_loaded:  [...state.loaded.music],
+    }),
+    reset: () => {
+      // Bump epoch first so any in-flight onComplete callbacks abort cleanly.
+      state.resetEpoch++;
+      // Kill march tweens explicitly so they can't complete and call impact logic.
+      for (const pod of state.active.pods) {
+        try { sceneRef.tweens.killTweensOf(pod); } catch {}
+        try { pod.destroy(); } catch {}
+      }
+      for (const lbl of state.active.labels) { try { lbl.destroy(); } catch {} }
+      for (const tr  of state.active.trails) { try { tr.destroy();  } catch {} }
+      state.active.pods.clear();
+      state.active.labels.clear();
+      state.active.trails.clear();
+      // Stop music so a reset feels like a hard restart.
+      if (state.music.playing) stopMusic();
+      state.counters = { total: 0, held: 0, breach: 0 };
+      state.scarTints = [];
+      ['oz-c-total','oz-c-held','oz-c-breach'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = 0;
+      });
+      if (targetSandbox) {
+        targetSandbox.clearTint();
+        try { targetSandbox.setFrame(0); } catch {} // back to intact damage frame
+      }
+      repaintScars();
+    },
+  };
+})();
+</script>
+</body>
+</html>
