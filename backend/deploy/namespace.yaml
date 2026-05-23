@@ -1,0 +1,20 @@
+# openzerg namespace manifest.
+#
+# Apply once per cluster before running the control plane:
+#   kubectl apply -f backend/deploy/namespace.yaml
+#
+# The control plane will also create this namespace programmatically when
+# missing (see internal/k8s.EnsureNamespace), but this manifest is the
+# authoritative declarative definition and is what M2 ships.
+#
+# Labels follow the recommended Kubernetes app labeling scheme so the
+# namespace and its pods are easy to filter:
+#   kubectl get pods -A -l app.kubernetes.io/part-of=openzerg
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openzerg
+  labels:
+    app.kubernetes.io/name: openzerg
+    app.kubernetes.io/part-of: openzerg
+    app.kubernetes.io/managed-by: openzerg-control-plane
