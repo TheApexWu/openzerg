@@ -9,12 +9,18 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
+
+// defaultPollInterval is the polling cadence used by WaitForCompletion when
+// the caller does not pass an explicit interval. Tests inject a much smaller
+// value through WaitForCompletionWithInterval.
+const defaultPollInterval = 2 * time.Second
 
 // CreatePod creates pod in its declared namespace using the supplied
 // clientset. The created object (with server-populated fields like UID and
@@ -71,4 +77,69 @@ func DeletePod(ctx context.Context, cs kubernetes.Interface, namespace, name str
 		return fmt.Errorf("k8s.DeletePod: delete %s/%s: %w", namespace, name, err)
 	}
 	return nil
+}
+
+// WaitForCompletion polls the pod until it reaches a terminal phase
+// (PodSucceeded or PodFailed) or the context is cancelled. The final pod
+// object (after the terminal Get) is returned so callers can inspect
+// container statuses, exit codes, and message strings without an extra
+// round-trip.
+//
+// A NotFound during polling is treated as an error: the swarm should never
+// race a foreign delete, and silently succeeding here would hide bugs.
+//
+// Callers wanting a non-default poll cadence (e.g. unit tests) should use
+// WaitForCompletionWithInterval; this wrapper exists so that production call
+// sites stay terse.
+func WaitForCompletion(ctx context.Context, cs kubernetes.Interface, namespace, name string) (*corev1.Pod, error) {
+	return WaitForCompletionWithInterval(ctx, cs, namespace, name, defaultPollInterval)
+}
+
+// WaitForCompletionWithInterval is WaitForCompletion with an injectable poll
+// interval. interval must be > 0.
+func WaitForCompletionWithInterval(ctx context.Context, cs kubernetes.Interface, namespace, name string, interval time.Duration) (*corev1.Pod, error) {
+	if cs == nil {
+		return nil, fmt.Errorf("k8s.WaitForCompletion: nil clientset")
+	}
+	if namespace == "" {
+		return nil, fmt.Errorf("k8s.WaitForCompletion: empty namespace")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("k8s.WaitForCompletion: empty name")
+	}
+	if interval <= 0 {
+		return nil, fmt.Errorf("k8s.WaitForCompletion: non-positive interval %v", interval)
+	}
+
+	pods := cs.CoreV1().Pods(namespace)
+
+	// Initial fetch covers the case where the pod is already terminal.
+	pod, err := pods.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("k8s.WaitForCompletion: get %s/%s: %w", namespace, name, err)
+	}
+	if isTerminalPhase(pod.Status.Phase) {
+		return pod, nil
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("k8s.WaitForCompletion: %s/%s: %w", namespace, name, ctx.Err())
+		case <-ticker.C:
+			pod, err := pods.Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("k8s.WaitForCompletion: get %s/%s: %w", namespace, name, err)
+			}
+			if isTerminalPhase(pod.Status.Phase) {
+				return pod, nil
+			}
+		}
+	}
+}
+
+func isTerminalPhase(p corev1.PodPhase) bool {
+	return p == corev1.PodSucceeded || p == corev1.PodFailed
 }

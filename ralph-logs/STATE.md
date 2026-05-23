@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:45:00Z (iter 0009)
+Last updated: 2026-05-23T17:46:30Z (iter 0010)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -36,7 +36,7 @@ See `RALPH_README.md` for state machine rules and update format.
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
 - status: IN_PROGRESS
-- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod + k8s.BuildClientset + k8s.CreatePod + k8s.DeletePod (idempotent, NotFound-safe, fake-clientset tested); StreamLogs/Wait still TODO.
+- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod + k8s.BuildClientset + k8s.CreatePod + k8s.DeletePod + k8s.WaitForCompletion (terminal-phase poll, ctx-cancellable, fake-clientset tested); StreamLogs + run-loop glue still TODO.
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
 - status: PENDING
@@ -68,3 +68,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0007 | 2026-05-23T17:42:07Z | M2 | progress | k8s.BuildClientset added (client-go, explicit/$KUBECONFIG/in-cluster); 3 unit tests green
 - iter 0008 | 2026-05-23T17:43:26Z | M2 | progress | k8s.CreatePod wrapper + 3 fake-clientset tests; build/vet/test green
 - iter 0009 | 2026-05-23T17:45:00Z | M2 | progress | k8s.DeletePod wrapper (idempotent on NotFound) + 3 fake-clientset tests; build/vet/test green
+- iter 0010 | 2026-05-23T17:46:30Z | M2 | progress | k8s.WaitForCompletion polls until Succeeded/Failed, ctx-cancellable; 4 fake-clientset tests; build/vet/test green
