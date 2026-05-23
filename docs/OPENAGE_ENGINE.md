@@ -6,10 +6,17 @@ OpenAge is included as a Git submodule at:
 vendor/openage
 ```
 
-Pinned revision at time of addition:
+The official free OpenAge data repo is included as a second submodule at:
 
 ```txt
-865bd548
+vendor/openage-data
+```
+
+Pinned revisions at time of addition:
+
+```txt
+openage:      865bd548
+openage-data: 7a1beff
 ```
 
 ## Why submodule, not copied source
@@ -32,15 +39,25 @@ git -C vendor/openage pull
 
 Then commit the changed submodule pointer intentionally.
 
+## Asset choice
+
+We are using the official free OpenAge asset repository:
+
+```txt
+https://github.com/SFTtech/openage-data
+```
+
+That repo is intended to eventually replace proprietary Genie/AoE media and is licensed under CC-BY-SA/GPL terms. We are **not** using AoE2 assets because the team does not own them locally, and we should not download unofficial copyrighted packs.
+
 ## Build caveat
 
-OpenAge is a C++20/Python/Cython/Qt6/OpenGL engine. It is not a drop-in browser dependency and it does not ship copyrighted Age of Empires assets.
+OpenAge is a C++20/Python/Cython/Qt6/OpenGL engine. It is not a drop-in browser dependency.
 
 From OpenAge's README:
 
-- The engine uses original game assets but does not ship them.
-- To play, you need original AoE/AoE2/Definitive Edition assets and conversion.
+- The engine can use original game assets, but does not ship them.
 - OpenAge currently notes that gameplay is basically non-functional while engine simulation work is ongoing.
+- `openage-data` provides free assets, but may not create a complete playable AoE-like experience by itself.
 
 So our realistic demo path is:
 
@@ -55,3 +72,5 @@ So our realistic demo path is:
 - `vendor/openage/doc/building.md`
 - `vendor/openage/doc/media_convert.md`
 - `vendor/openage/doc/build_instructions/docker.md`
+- `vendor/openage-data/README.md`
+- `vendor/openage-data/copying.md`

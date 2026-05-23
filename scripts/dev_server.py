@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+OPENAGE_PROCESS = None
+OPENAGE_LOG = Path("/tmp/openzerg-openage-engine.log")
 
 
 def load_dotenv() -> None:
@@ -45,6 +48,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self.nimble_status()
         if self.path.startswith("/api/integrations/clickhouse"):
             return self.clickhouse_status()
+        if self.path.startswith("/api/openage/status"):
+            return self.openage_status()
+        if self.path.startswith("/api/openage/launch"):
+            return self.openage_launch()
         return super().do_GET()
 
     def nimble_status(self) -> None:
@@ -90,6 +97,53 @@ class Handler(SimpleHTTPRequestHandler):
             "mode": "configured" if configured else "demo",
             "configured": configured,
         })
+
+    def openage_status(self) -> None:
+        global OPENAGE_PROCESS
+        running = bool(OPENAGE_PROCESS and OPENAGE_PROCESS.poll() is None)
+        tail = ""
+        if OPENAGE_LOG.exists():
+            tail = "\n".join(OPENAGE_LOG.read_text(errors="replace").splitlines()[-30:])
+        return self.send_json(200, {
+            "service": "openage",
+            "built": (ROOT / "vendor/openage/bin/run").exists(),
+            "running": running,
+            "pid": OPENAGE_PROCESS.pid if running else None,
+            "log_tail": tail,
+        })
+
+    def openage_launch(self) -> None:
+        global OPENAGE_PROCESS
+        if OPENAGE_PROCESS and OPENAGE_PROCESS.poll() is None:
+            return self.openage_status()
+
+        bin_dir = ROOT / "vendor/openage/bin"
+        run_bin = bin_dir / "run"
+        if not run_bin.exists():
+            return self.send_json(409, {
+                "service": "openage",
+                "running": False,
+                "message": "OpenAge is not built yet. Build vendor/openage first.",
+            })
+
+        env = os.environ.copy()
+        data_root = ROOT / "vendor/openage-data"
+        env.setdefault("XDG_DATA_HOME", str(data_root))
+        env.setdefault("XDG_CONFIG_HOME", str(data_root))
+        env.setdefault("XDG_CACHE_HOME", str(data_root / ".cache"))
+        OPENAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        log_file = OPENAGE_LOG.open("a")
+        log_file.write("\n--- launching OpenAge engine demo ---\n")
+        log_file.flush()
+        OPENAGE_PROCESS = subprocess.Popen(
+            [str(run_bin), "test", "--demo", "main.tests.engine_demo", "0"],
+            cwd=str(bin_dir),
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        return self.openage_status()
 
 
 if __name__ == "__main__":
