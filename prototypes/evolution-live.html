@@ -53,6 +53,14 @@
   .run-counter-status.active   { color: var(--warn);  border-color: #5b4a1d; background: #1a1408; }
   .run-counter-status.complete { color: var(--good);  border-color: #14532d; background: #07140d; }
   .run-counter-status.blocked  { color: var(--bad);   border-color: #7f1d1d; background: #1c0d0d; }
+  .run-counter-queue {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    margin-left: 6px; padding: 2px 7px;
+    border: 1px dashed var(--border);
+    color: var(--muted); font-size: 10px;
+    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
+  }
+  .run-counter-queue.hidden { display: none; }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .actions { display: flex; gap: 8px; align-items: center; }
 
@@ -271,13 +279,15 @@
         <span class="run-counter-label">runs</span>
         <span class="run-counter-num" id="run-counter-num">0</span>
         <span class="run-counter-status" id="run-counter-status">idle</span>
+        <span class="run-counter-queue hidden" id="run-counter-queue"></span>
       </span>
     </div>
     <div class="actions">
       <button id="btn-refresh">Refresh data</button>
       <button id="btn-history">History</button>
       <button id="btn-reset">Clear lineages</button>
-      <button id="btn-hardened">Run hardened config</button>
+      <button id="btn-compare">Compare runs</button>
+      <button id="btn-hardened">Queue hardened</button>
       <button id="btn-run" class="primary">Run evolution</button>
     </div>
   </header>
@@ -518,11 +528,46 @@
     $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'demo stream';
   }
 
+  // ---- Run queue: never interrupt an in-flight run; chain instead. ----
+  let runQueue = [];        // pending: ['permissive' | 'hardened', ...]
+  let runInProgress = false;
+  let lastDecision = 'idle';
+
+  function enqueueRun(kind) {
+    runQueue.push(kind);
+    if (!runInProgress) drainRunQueue();
+    else updateRunCounter('active', currentKind());
+  }
+
+  function enqueueComparison() {
+    // Clear any pending queue and chain permissive → hardened back-to-back.
+    runQueue = ['permissive', 'hardened'];
+    if (!runInProgress) drainRunQueue();
+    else updateRunCounter('active', currentKind());
+  }
+
+  function drainRunQueue() {
+    if (runQueue.length === 0) {
+      runInProgress = false;
+      updateRunCounter(lastDecision === 'BLOCKED' ? 'blocked' : lastDecision === 'CLEARED' ? 'complete' : 'idle');
+      return;
+    }
+    const next = runQueue.shift();
+    runInProgress = true;
+    line(`▶ run queued: <strong>${next}</strong>`, 'source');
+    runEvolution(next === 'hardened');
+  }
+
+  let _activeKind = null;
+  function currentKind() { return _activeKind; }
+
   function clearLineages() {
     // Explicit user action — wipes the corpus too.
+    runQueue = []; runInProgress = false; _activeKind = null;
     runs = []; runSeq = 1;
     agents = [];
     runResetVisuals(true);
+    lastDecision = 'idle';
     updateRunCounter('idle');
     renderHistory(); renderSaved();
   }
@@ -543,16 +588,26 @@
     setGate('PENDING', 'Deployment gate armed', 'No human approves the deployment. The swarm decides from fitness evidence.');
   }
 
-  function updateRunCounter(status) {
+  function updateRunCounter(status, activeKind) {
     // status: 'idle' | 'active' | 'complete' | 'blocked'
     const n = runs.length;
     $('run-counter-num').textContent = n;
     const el = $('run-counter-status');
     el.className = 'run-counter-status ' + (status === 'idle' ? '' : status);
-    el.textContent = status === 'active'   ? 'in progress'
-                   : status === 'complete' ? 'complete'
-                   : status === 'blocked'  ? 'blocked'
-                   :                         'idle';
+    const kindLabel = activeKind ? ` · ${activeKind}` : '';
+    el.textContent = (status === 'active'   ? 'in progress'
+                   :  status === 'complete' ? 'complete'
+                   :  status === 'blocked'  ? 'blocked'
+                   :                          'idle') + (status === 'active' ? kindLabel : '');
+    // Queue badge
+    const q = $('run-counter-queue');
+    if (runQueue.length > 0) {
+      const upcoming = runQueue.map(k => k === 'hardened' ? 'hardened' : 'permissive').join(' → ');
+      q.textContent = `next: ${upcoming}`;
+      q.classList.remove('hidden');
+    } else {
+      q.classList.add('hidden');
+    }
   }
 
   function reset() {
@@ -605,7 +660,9 @@
 
   function runEvolution(isHardened = false) {
     reset(); hardened = isHardened;
-    updateRunCounter('active');
+    _activeKind = isHardened ? 'hardened' : 'permissive';
+    runInProgress = true;
+    updateRunCounter('active', _activeKind);
     $('loop-badge').textContent = isHardened ? 'hardened run' : 'autonomous run';
     $('core-state').textContent = isHardened ? 'hardened config' : 'permissive config';
     line('▶ container spin-up detected — OpenZerg starts without human approval', 'source');
@@ -655,15 +712,19 @@
       }
       const decision = bestFitness >= 0.8 ? 'BLOCKED' : 'CLEARED';
       runs.push({ id: `run-${runSeq++}`, name: `${isHardened ? 'Hardened' : 'Permissive'} run`, best: bestFitness, decision, agents: agents.length, saved: agents.filter(a => a.saved).length, time: new Date().toLocaleTimeString() });
-      renderHistory();
-      updateRunCounter(decision === 'BLOCKED' ? 'blocked' : 'complete');
+      renderHistory(); renderSaved();
+      lastDecision = decision;
+      _activeKind = null;
       $('loop-badge').textContent = 'complete';
+      // Chain next queued run, or settle to idle status.
+      setTimeout(drainRunQueue, 600);
     }, t + 300));
   }
 
-  $('btn-run').onclick = () => runEvolution(false);
-  $('btn-reset').onclick = clearLineages;
-  $('btn-hardened').onclick = () => runEvolution(true);
+  $('btn-run').onclick      = () => enqueueRun('permissive');
+  $('btn-reset').onclick    = clearLineages;
+  $('btn-hardened').onclick = () => enqueueRun('hardened');
+  $('btn-compare').onclick  = enqueueComparison;
   $('btn-refresh').onclick = refreshData;
   $('btn-history').onclick = () => setRightView(viewMode === 'history' ? 'log' : 'history');
   document.querySelectorAll('.right .tab').forEach(t => {
