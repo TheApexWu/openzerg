@@ -1,0 +1,14 @@
+assets/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.db
+*.db-wal
+*.db-shm
+OPENZERG_DOCS.md
+OPERZERG_PIVOT.md
+OPERZERG_DOCS.html
+OPENZERG_PIVOT.html
+zerg-carson-plan.pdf
+.DS_Store
