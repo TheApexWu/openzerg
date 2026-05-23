@@ -85,7 +85,18 @@
   .pod-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
   .fitness { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; }
 
-  .logs { padding: 12px; overflow: auto; flex: 1; background: #090a0c; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.55; }
+  .logs {
+    padding: 12px; overflow: auto; flex: 1; background: #090a0c;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.55;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .logs::-webkit-scrollbar { width: 8px; height: 8px; }
+  .logs::-webkit-scrollbar-track { background: transparent; }
+  .logs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
+  .logs::-webkit-scrollbar-thumb:hover { background: #3f444c; }
+  .logs::-webkit-scrollbar-corner { background: transparent; }
   .line { color: var(--dim); white-space: pre-wrap; }
   .line strong { color: var(--ink); }
   .line.good { color: var(--green); }
