@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -161,6 +162,37 @@ func TestWaitForCompletionContextCancelled(t *testing.T) {
 	defer cancel()
 	if _, err := WaitForCompletionWithInterval(ctx, cs, "openzerg", "stuck", 5*time.Millisecond); err == nil {
 		t.Fatal("expected context cancellation error")
+	}
+}
+
+func TestStreamLogsHappyPath(t *testing.T) {
+	pod := newTestPod("openzerg", "noisy")
+	cs := fake.NewSimpleClientset(pod)
+
+	rc, err := StreamLogs(context.Background(), cs, "openzerg", "noisy", "")
+	if err != nil {
+		t.Fatalf("StreamLogs: %v", err)
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if len(b) == 0 {
+		t.Fatal("expected non-empty log stream from fake clientset")
+	}
+}
+
+func TestStreamLogsValidatesArgs(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	if _, err := StreamLogs(context.Background(), nil, "openzerg", "x", ""); err == nil {
+		t.Fatal("expected error for nil clientset")
+	}
+	if _, err := StreamLogs(context.Background(), cs, "", "x", ""); err == nil {
+		t.Fatal("expected error for empty namespace")
+	}
+	if _, err := StreamLogs(context.Background(), cs, "openzerg", "", ""); err == nil {
+		t.Fatal("expected error for empty name")
 	}
 }
 

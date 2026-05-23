@@ -9,6 +9,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -142,4 +143,39 @@ func WaitForCompletionWithInterval(ctx context.Context, cs kubernetes.Interface,
 
 func isTerminalPhase(p corev1.PodPhase) bool {
 	return p == corev1.PodSucceeded || p == corev1.PodFailed
+}
+
+// StreamLogs opens a follow=true log stream against the named pod's first
+// container and returns the underlying io.ReadCloser. The caller MUST Close
+// the returned reader; spawn will typically wrap it in a bufio.Scanner and
+// close it from a defer.
+//
+// The function intentionally does not buffer or scan lines itself — that
+// belongs to the consumer (internal/spawn parses the final JSON line). This
+// keeps the k8s package free of evolve-layer concerns and lets the same
+// helper serve doctor / debug commands that just tee logs to stdout.
+//
+// If containerName is empty the server-side default (first container) is
+// used. Errors from the request are wrapped with the pod identity so log
+// failures are obviously distinct from create/delete failures upstream.
+func StreamLogs(ctx context.Context, cs kubernetes.Interface, namespace, name, containerName string) (io.ReadCloser, error) {
+	if cs == nil {
+		return nil, fmt.Errorf("k8s.StreamLogs: nil clientset")
+	}
+	if namespace == "" {
+		return nil, fmt.Errorf("k8s.StreamLogs: empty namespace")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("k8s.StreamLogs: empty name")
+	}
+	opts := &corev1.PodLogOptions{Follow: true}
+	if containerName != "" {
+		opts.Container = containerName
+	}
+	req := cs.CoreV1().Pods(namespace).GetLogs(name, opts)
+	rc, err := req.Stream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("k8s.StreamLogs: stream %s/%s: %w", namespace, name, err)
+	}
+	return rc, nil
 }
