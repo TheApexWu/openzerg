@@ -30,8 +30,26 @@ useful probes — not a long crawl.
 
 - `bash` (Pi built-in): use `curl -sS -i -H 'X-OpenZerg-Probe: true' ...`
   for raw HTTP. Use `jq` to shape JSON responses.
-- (M4) `nimble_fetch`: a shell wrapper for the Nimble web automation API,
-  for JS-rendered pages that `curl` cannot handle.
+- `nimble_fetch`: shell wrapper at `/home/node/tools/nimble_fetch.sh`. Use
+  this whenever you need a JS-rendered DOM from the target — Juice Shop is
+  an Angular SPA and `curl` returns the empty shell. Invocation:
+
+  ```
+  /home/node/tools/nimble_fetch.sh https://target/path/with/spa/route
+  ```
+
+  Prints one JSON line:
+  `{"ok":true,"status_code":200,"url":"...","html_len":N,"markdown":"<first 1200 chars>"}`
+  on success, or `{"ok":false,"error":"..."}` on failure. The full HTML is
+  not printed — read `html_len` to gauge whether to call `curl` for a
+  targeted slice. Prefer `nimble_fetch` over raw `curl` for any route that
+  returns near-empty HTML from `curl`.
+
+  When this tool succeeds, include a `"used_nimble": true` field on a
+  `raw_findings` entry in your final result line so the control plane can
+  attribute Nimble usage in the summary. If the env var
+  `OPENZERG_DISABLE_NIMBLE=1` is set the tool returns an error; in that
+  case fall back to curl-only and proceed.
 
 You do NOT have file write access on the target. You do NOT have shell on
 the target. Treat the target as a black-box HTTP server.

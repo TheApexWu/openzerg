@@ -142,9 +142,63 @@ the model to set `status: "ERROR"` and `evidence: "<reason>"` in the final
 result line on any unrecoverable failure. The control plane's
 `evolve.Score` (M5) maps `status==ERROR` → `0.0`.
 
-## M4 research: Nimble
+## M6 research: Nimble Integration
 
-Not yet performed. Will be filled in iter ≥ 0020 when M4 begins.
+Source: <https://docs.nimbleway.com/llms.txt> and the OpenAPI specs at
+`/api-reference/extract/extract.md` and `/api-reference/search/search.md`.
+
+### Resolved research questions
+
+- **Endpoint base URL:** `https://sdk.nimbleway.com/v1`.
+- **Auth scheme:** `Authorization: Bearer NIMBLE_API_KEY` header. No
+  query-string keys; the `NIMBLE_API_URL` hex value found in
+  `.env.example` is NOT a URL — it is an alternate API key form. We ignore
+  it and use the documented `NIMBLE_API_KEY` bearer flow.
+- **Primary endpoint we use:** `POST /v1/extract` for JS-rendered page
+  fetches. Body: `{url, render, formats}`. Response:
+  `{url, task_id, status, status_code, data:{html, markdown}, metadata}`.
+- **Secondary endpoint we use:** `POST /v1/search` for CVE seeding. Body:
+  `{query, max_results, search_depth, focus}`. Response:
+  `{total_results, results:[{title, description, url, content}], request_id}`.
+- **Rate limits:** Documented at `/nimble-sdk/admin/rate-limits.md`. We
+  stay well under any tier limit (≤1 call at startup, ≤1 call per pod per
+  generation).
+- **Tool exposure to Pi:** We do not write a Pi extension. Instead we ship
+  a tiny shell wrapper at `/home/node/tools/nimble_fetch.sh` and instruct
+  the model in `SKILL.md` to invoke it via the built-in `bash` tool. The
+  wrapper hides the API key (env-only, never echoed) and returns one
+  summarised JSON line the model can parse.
+
+### Failure modes the Go client handles
+
+- Missing key                -> sentinel `ErrMissingKey`, no HTTP call.
+- Empty URL / query          -> validation error, no HTTP call.
+- Network failure / timeout  -> wrapped `transport: ...` error.
+- 4xx/5xx response           -> `errors.Is(err, ErrUpstream)` true; status
+  code embedded in the message; body truncated to 256 chars.
+- 200 with malformed JSON    -> `json.SyntaxError` is wrapped.
+- API key leak               -> `TestKeyNeverLogged` is the canary; key
+  never appears in slog output, error messages, or returned structs.
+
+### Kill switch
+
+`./bin/openzerg run --disable-nimble` drops `NIMBLE_API_KEY` from the pod's
+effective context by setting `OPENZERG_DISABLE_NIMBLE=1`. The in-pod
+`nimble_fetch.sh` short-circuits when that flag is set and the swarm
+proceeds with `curl`-only attacks. Useful as a demo-time safety net if
+Nimble itself has a bad day.
+
+### Optional CVE seeding
+
+`./bin/openzerg run --enable-cve-seed` calls
+`nimble.SearchWeb(ctx, "OWASP Juice Shop CVE recent vulnerability")` at
+startup and folds the top hit's title+snippet into the first Gen-1
+genome's `hint`. Off by default so demo runs stay deterministic.
+
+## Old M4 placeholder
+
+(M4 in this repo is the evolution loop, not Nimble. The Nimble integration
+landed in M6 per the user's milestone reordering on 2026-05-23.)
 
 ## Deviations from PRD recorded here
 

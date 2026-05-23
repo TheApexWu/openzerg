@@ -36,10 +36,18 @@ COPY --chown=node:node skills/attacker /home/node/.pi/agent/skills/attacker
 # renders these with the per-pod TARGET_URL / GENOME values.
 COPY --chown=node:node prompts /home/node/prompts
 
+# Tool wrappers the attacker skill invokes via bash (e.g. nimble_fetch).
+COPY --chown=node:node tools /home/node/tools
+USER root
+RUN chmod +x /home/node/tools/*.sh
+USER node
+
 # Entrypoint owns the I/O contract: read env, render prompts, invoke pi,
 # capture model output, emit final attacker_result_jsonl line.
 COPY --chown=node:node entrypoint.sh /home/node/entrypoint.sh
+USER root
 RUN chmod +x /home/node/entrypoint.sh
+USER node
 
 # Required envs at runtime (set by the k8s pod spec):
 #   TARGET_URL          — full URL to attack

@@ -28,6 +28,7 @@ import (
 	"github.com/TheApexWu/openzerg/backend/internal/config"
 	"github.com/TheApexWu/openzerg/backend/internal/evolve"
 	"github.com/TheApexWu/openzerg/backend/internal/k8s"
+	"github.com/TheApexWu/openzerg/backend/internal/nimble"
 	"github.com/TheApexWu/openzerg/backend/internal/openrouter"
 	"github.com/TheApexWu/openzerg/backend/internal/secrets"
 	"github.com/TheApexWu/openzerg/backend/internal/spawn"
@@ -129,6 +130,24 @@ func cmdDoctor(args []string, out io.Writer) error {
 	// Defaults the run subcommand will use.
 	fmt.Fprintf(out, "default namespace:  %s\n", config.DefaultNamespace)
 	fmt.Fprintf(out, "default image:      %s\n", config.DefaultImage)
+
+	// Nimble reachability probe: presence-only check; if the key is set,
+	// we do a tiny /v1/search ping so judges can see live wiring at demo
+	// time. The probe is bounded by a 5s context.
+	if cfg.HasNimble() {
+		probeContext, cancelProbe := context.WithTimeout(context.Background(), 5*time.Second)
+		nimbleClient := nimble.New(cfg.NimbleAPIKey)
+		_, probeErr := nimbleClient.SearchWeb(probeContext, "ping", nimble.SearchOptions{MaxResults: 1})
+		cancelProbe()
+		if probeErr != nil {
+			fmt.Fprintf(out, "nimble probe:       UNREACHABLE (%v)\n", probeErr)
+		} else {
+			fmt.Fprintf(out, "nimble probe:       reachable\n")
+		}
+	} else {
+		fmt.Fprintf(out, "nimble probe:       skipped (no key)\n")
+	}
+
 	fmt.Fprintln(out, "doctor: ok")
 	return nil
 }
@@ -221,6 +240,7 @@ func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
 
 	runID := fmt.Sprintf("r%d", time.Now().Unix())
 	runStore := store.NewRunStore(runID, cfg.TargetURL)
+	runStore.NimbleEnabled = !cfg.DisableNimble
 
 	// Optional OpenRouter client for LLM mutation. Missing key falls back
 	// to pure-Go mutation; we never gate the run on it.
@@ -231,7 +251,15 @@ func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
 	defer cancelRoot()
 	installSignalHandler(rootContext, cancelRoot, stdout, runStore)
 
-	currentPopulation := attacks.PickSeedGenomes(cfg.Population)
+	var currentPopulation []attacks.Genome
+	if cfg.DisableNimble {
+		currentPopulation = attacks.PickSeedGenomes(cfg.Population)
+	} else {
+		currentPopulation = attacks.PickSeedGenomesEnsuringNimble(cfg.Population)
+	}
+	if cfg.EnableCVESeed && !cfg.DisableNimble {
+		currentPopulation = applyCVESeedHint(stdout, currentPopulation)
+	}
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for generationNumber := 1; generationNumber <= cfg.Generations; generationNumber++ {
@@ -310,6 +338,7 @@ func runOneGeneration(
 			TargetURL:      cfg.TargetURL,
 			RateLimitRPS:   cfg.RateLimitRPS,
 			TimeoutSeconds: 60,
+			DisableNimble:  cfg.DisableNimble,
 		})
 		if perr != nil {
 			return nil, fmt.Errorf("build pod %d: %w", podIndex, perr)
@@ -442,6 +471,40 @@ func installSignalHandler(ctx context.Context, cancel context.CancelFunc, stdout
 		case <-ctx.Done():
 		}
 	}()
+}
+
+// applyCVESeedHint queries Nimble's /v1/search for an OWASP Juice Shop CVE
+// snippet and appends it to the first genome's hint. Best-effort: any
+// failure is logged and the population is returned untouched so the run
+// proceeds. Demos turn this off by default so seeds stay deterministic.
+func applyCVESeedHint(stdout io.Writer, population []attacks.Genome) []attacks.Genome {
+	if len(population) == 0 {
+		return population
+	}
+	envFilePath := defaultEnvPath()
+	cfg, err := secrets.Load(envFilePath)
+	if err != nil || !cfg.HasNimble() {
+		fmt.Fprintln(stdout, "cve-seed: NIMBLE_API_KEY missing; skipping")
+		return population
+	}
+	nimbleClient := nimble.New(cfg.NimbleAPIKey)
+	searchContext, cancelSearch := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelSearch()
+	results, err := nimbleClient.SearchWeb(searchContext,
+		"OWASP Juice Shop CVE recent vulnerability",
+		nimble.SearchOptions{MaxResults: 3, SearchDepth: "lite"})
+	if err != nil {
+		fmt.Fprintf(stdout, "cve-seed: search failed: %v\n", err)
+		return population
+	}
+	if len(results) == 0 {
+		fmt.Fprintln(stdout, "cve-seed: no results")
+		return population
+	}
+	top := results[0]
+	fmt.Fprintf(stdout, "cve-seed: %q -> %s\n", top.Title, top.URL)
+	population[0].Hint = population[0].Hint + " [cve-seed: " + top.Title + " — " + top.Snippet + "]"
+	return population
 }
 
 func presence(ok bool) string {

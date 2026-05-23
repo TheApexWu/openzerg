@@ -80,6 +80,7 @@ fi
 CATEGORY="$(printf '%s' "$GENOME" | jq -r '.category // "unknown"')"
 HINT="$(printf '%s' "$GENOME" | jq -r '.hint // ""')"
 TARGET_PATH="$(printf '%s' "$GENOME" | jq -r '.target_path // ""')"
+REQUIRES_NIMBLE="$(printf '%s' "$GENOME" | jq -r '.requires_nimble // false')"
 export VECTOR CATEGORY
 
 log "starting attacker pod (vector=$VECTOR target=$TARGET_URL model=$PI_MODEL)"
@@ -103,6 +104,7 @@ user_prompt="$(sed \
   -e "s|{{TARGET_PATH}}|${TARGET_PATH}|g" \
   -e "s|{{HINT}}|${HINT}|g" \
   -e "s|{{RATE_LIMIT_RPS}}|${RATE_LIMIT_RPS}|g" \
+  -e "s|{{REQUIRES_NIMBLE}}|${REQUIRES_NIMBLE}|g" \
   "$user_prompt_path")"
 
 # Hard wall-clock cap so a stuck Pi session cannot outlive the pod's

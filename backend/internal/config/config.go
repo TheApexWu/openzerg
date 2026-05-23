@@ -36,6 +36,14 @@ type RuntimeConfig struct {
 	RateLimitRPS   int
 	KubeconfigPath string
 	EnvFilePath    string
+	// DisableNimble removes NIMBLE_API_KEY from pod env and sets
+	// OPENZERG_DISABLE_NIMBLE=1 so the in-pod tool wrapper short-circuits.
+	// This is the demo-time kill switch if Nimble has a bad day.
+	DisableNimble bool
+	// EnableCVESeed turns on the Nimble-driven startup CVE search that
+	// rewrites one Gen-1 genome's hint with a fresh snippet. Off by
+	// default for demo determinism.
+	EnableCVESeed bool
 }
 
 // ParseRunFlags parses the flags accepted by `openzerg run`. The supplied
@@ -55,6 +63,8 @@ func ParseRunFlags(args []string, out io.Writer) (RuntimeConfig, error) {
 	fs.StringVar(&cfg.OutDir, "out-dir", cfg.OutDir, "output directory (env OPENZERG_OUT_DIR)")
 	fs.IntVar(&cfg.RateLimitRPS, "rate-limit", cfg.RateLimitRPS, "aggregate req/s ceiling (env RATE_LIMIT_RPS)")
 	fs.StringVar(&cfg.KubeconfigPath, "kubeconfig", cfg.KubeconfigPath, "kubeconfig path (env KUBECONFIG)")
+	fs.BoolVar(&cfg.DisableNimble, "disable-nimble", cfg.DisableNimble, "kill-switch: omit NIMBLE_API_KEY from pods and disable the in-pod nimble_fetch wrapper")
+	fs.BoolVar(&cfg.EnableCVESeed, "enable-cve-seed", cfg.EnableCVESeed, "use Nimble /v1/search at startup to seed one Gen-1 genome hint with a fresh CVE snippet")
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
@@ -79,6 +89,8 @@ func defaultRuntime() RuntimeConfig {
 		OutDir:         getenv("OPENZERG_OUT_DIR", DefaultOutDir),
 		RateLimitRPS:   getenvInt("RATE_LIMIT_RPS", DefaultRateLimit),
 		KubeconfigPath: ResolveKubeconfigPath(),
+		DisableNimble:  getenvBool("OPENZERG_DISABLE_NIMBLE", false),
+		EnableCVESeed:  getenvBool("OPENZERG_ENABLE_CVE_SEED", false),
 	}
 	return cfg
 }

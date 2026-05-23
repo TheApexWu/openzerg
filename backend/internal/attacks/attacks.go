@@ -7,13 +7,14 @@ package attacks
 // the GENOME env var. Field names mirror data_contracts.genome_schema in
 // PRD.json.
 type Genome struct {
-	Vector       string         `json:"vector"`
-	Category     string         `json:"category"`
-	Technique    string         `json:"technique"`
-	TargetPath   string         `json:"target_path"`
-	Params       map[string]any `json:"params"`
-	Hint         string         `json:"hint"`
-	ParentPodID  string         `json:"parent_pod_id,omitempty"`
+	Vector         string         `json:"vector"`
+	Category       string         `json:"category"`
+	Technique      string         `json:"technique"`
+	TargetPath     string         `json:"target_path"`
+	Params         map[string]any `json:"params"`
+	Hint           string         `json:"hint"`
+	ParentPodID    string         `json:"parent_pod_id,omitempty"`
+	RequiresNimble bool           `json:"requires_nimble,omitempty"`
 }
 
 // SeedGenomes is the Generation-1 starter population for the OWASP Juice
@@ -78,9 +79,10 @@ var SeedGenomes = []Genome{
 	},
 	{
 		Vector: "admin_section", Category: "access_control", Technique: "force_browse",
-		TargetPath: "/#/administration",
-		Params:     map[string]any{},
-		Hint:       "Try to reach admin UI directly.",
+		TargetPath:     "/#/administration",
+		Params:         map[string]any{},
+		Hint:           "Try to reach admin UI directly.",
+		RequiresNimble: true,
 	},
 	{
 		Vector: "feedback_xss_stored", Category: "xss", Technique: "stored",
@@ -112,9 +114,10 @@ var SeedGenomes = []Genome{
 	},
 	{
 		Vector: "score_board", Category: "data_exposure", Technique: "force_browse",
-		TargetPath: "/#/score-board",
-		Params:     map[string]any{},
-		Hint:       "Find the hidden score-board route.",
+		TargetPath:     "/#/score-board",
+		Params:         map[string]any{},
+		Hint:           "Find the hidden score-board route.",
+		RequiresNimble: true,
 	},
 }
 
@@ -130,4 +133,34 @@ func PickSeedGenomes(n int) []Genome {
 		out = append(out, SeedGenomes[i%len(SeedGenomes)])
 	}
 	return out
+}
+
+// PickSeedGenomesEnsuringNimble is the Nimble-aware variant. It first picks
+// n deterministic seeds, then guarantees that at least one of them has
+// RequiresNimble=true so the verification step ("at least one pod per
+// generation invokes nimble_fetch when enabled") is honoured for small
+// populations. If n=0 returns nil; if no requires-nimble seed exists in
+// the catalog it falls back to PickSeedGenomes silently.
+func PickSeedGenomesEnsuringNimble(n int) []Genome {
+	picked := PickSeedGenomes(n)
+	if len(picked) == 0 {
+		return picked
+	}
+	for _, g := range picked {
+		if g.RequiresNimble {
+			return picked
+		}
+	}
+	var nimbleSeed *Genome
+	for i := range SeedGenomes {
+		if SeedGenomes[i].RequiresNimble {
+			nimbleSeed = &SeedGenomes[i]
+			break
+		}
+	}
+	if nimbleSeed == nil {
+		return picked
+	}
+	picked[len(picked)-1] = *nimbleSeed
+	return picked
 }

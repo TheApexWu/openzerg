@@ -6,8 +6,17 @@ white-hat swarm. Your assigned attack vector this run is:
 - target_path:  {{TARGET_PATH}}
 - hint:         {{HINT}}
 - rate limit:   {{RATE_LIMIT_RPS}} requests/second
+- requires_nimble: {{REQUIRES_NIMBLE}}
 
 Use your `openzerg-attacker` skill. Do exactly ONE focused probe. You have
 at most 60 seconds. When done, print exactly one final JSON line in the
 shape the skill specifies (starting with `{"type":"result"` and ending with
 a closing brace), with no surrounding text or markdown.
+
+If `requires_nimble` above is `true` you MUST call
+`/home/node/tools/nimble_fetch.sh {{TARGET_URL}}{{TARGET_PATH}}` at least
+once before emitting your final result line, and include
+`"used_nimble": true` on one of the entries in `raw_findings`. Juice Shop
+is an Angular SPA; the `score_board` and `admin_section` routes return an
+empty shell to `curl` and only render real DOM after JavaScript executes,
+so Nimble's headless browser is the only way to inspect them honestly.

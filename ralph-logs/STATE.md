@@ -1,8 +1,8 @@
 # OpenZerg Ralph State
 
-STATUS: RUNNING
+STATUS: DONE
 
-Last updated: 2026-05-23T19:15:00Z (iter 0024)
+Last updated: 2026-05-23T19:44:31Z (M6 accepted — Nimble integration live)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -86,6 +86,22 @@ See `RALPH_README.md` for state machine rules and update format.
     cd backend && go vet ./...    -> ok
     cd backend && go test ./...   -> ok
 
+### M6 — Nimble integration (sponsor tool — required)
+- status: ACCEPTED
+- accepted_at: 2026-05-23T19:44:31Z
+- summary: nimble client (Go), 7 client tests (incl. key-leak canary), pod-side nimble_fetch.sh wrapper, SKILL.md tool exposure, --disable-nimble kill switch, --enable-cve-seed startup hook, doctor reachability probe, and summary.md Nimble-attribution section all live. Updated user.tmpl to honour `requires_nimble: true` and PickSeedGenomesEnsuringNimble guarantees at least one nimble-required vector in small populations. Live smokes against juice-shop pass both ways: enabled run (pop=3) BREACHed gen 1 pod 0 (sqli_login admin token) AND pod 2 invoked nimble_fetch on /#/administration with `used_nimble:true` on raw_findings; --disable-nimble run completed cleanly with no nimble usage and summary noting the kill switch.
+- verify_evidence: |
+    cd backend && go build ./...                            -> ok
+    cd backend && go vet ./...                              -> ok
+    cd backend && go test ./...                             -> ok (nimble: 7 tests incl. TestKeyNeverLogged)
+    bash scripts/build-and-push-attacker.sh                 -> pushed
+    ./bin/openzerg doctor                                   -> NIMBLE_API_KEY: present, nimble probe: reachable
+    ./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 1
+        -> BREACH gen 1 pod 0 sqli_login; pod 2 used_nimble:true on /#/administration; summary mentions Nimble usage
+    ./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 1 --disable-nimble
+        -> EXHAUSTED clean; summary notes "Nimble was disabled for this run"
+    kubectl -n openzerg get pods                            -> No resources found
+
 
 
 ---
@@ -112,3 +128,5 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0022 | 2026-05-23T18:58:00Z | M3 | accepted | pi-attacker live; paid Gemma 4 pinned; 3-pod run BREACH+NOOP+NOOP; entrypoint set -e fixes + single-pass jq extraction; control plane post-completion log re-reads
 - iter 0024 | 2026-05-23T19:10:30Z | M4 | accepted | evolution loop wired: fitness.Score (PRD rules), pure-Go Mutate + cross-breed, optional Gemma 4 LLM mutation w/ 32-call budget, RunStore + summary JSON/MD writers, SIGINT cancellation. Live 3-pod 2-gen smoke -> BREACH gen 1 sqli_login (~103s); artifacts at out/summary-r1779563300.{json,md}; pods cleaned.
 - iter 0024 | 2026-05-23T19:15:00Z | M5 | accepted | legacy Python + HTML/Phaser artifacts removed; README + DEMO + ARCHITECTURE present; sanitized sample at docs/sample-summary/; build/vet/test green.
+- user  ---- | 2026-05-23T19:25:00Z | ALL | reorder  | user moved Nimble to M6; M4=Evolution, M5=Cleanup, M6=Nimble (pending). Existing ACCEPTED milestones preserved; only labels remapped.
+- iter 0027 | 2026-05-23T19:44:31Z | M6 | accepted | Nimble live: rebuilt pi-attacker image with nimble_fetch + REQUIRES_NIMBLE prompt; pop-3 smoke BREACHed gen1 sqli_login AND pod 2 invoked nimble on /#/administration (used_nimble:true on raw_findings); summary writer attributes nimble usage; --disable-nimble path produces clean run with no nimble calls; all M0-M6 ACCEPTED -> STATUS: DONE.

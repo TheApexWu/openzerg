@@ -43,6 +43,10 @@ type RunStore struct {
 	BestFitness float64            `json:"best_fitness"`
 	Breach      *BreachRecord      `json:"breach"`
 	Cancelled   bool               `json:"cancelled,omitempty"`
+	// NimbleEnabled records whether the nimble_fetch tool was available
+	// to attacker pods during this run. The summary writer uses it to
+	// distinguish "no pod used Nimble" from "Nimble was disabled".
+	NimbleEnabled bool `json:"nimble_enabled"`
 }
 
 // BreachRecord summarises the winning pod when a generation hit fitness 1.0.
@@ -222,12 +226,31 @@ No pod returned fitness 1.0. The swarm explored {{.TotalPods}} probes across
 
 {{range .TopScorers}}- gen {{.Generation}} pod {{.PodID}} vector ` + "`{{.Vector}}`" + ` fitness {{printf "%.2f" .Fitness}} — {{.Evidence}}
 {{end}}
+
+## Nimble usage
+
+{{if not .NimbleEnabled}}Nimble was disabled for this run (--disable-nimble). No pods could call the nimble_fetch tool.
+{{else if eq (len .NimbleUsedBy) 0}}No Nimble usage observed. The attacker pods completed their probes using raw curl only.
+{{else}}{{range .NimbleUsedBy}}- gen {{.Generation}} pod {{.PodID}} (vector ` + "`{{.Vector}}`" + `) invoked nimble_fetch in its attack path.
+{{end}}{{end}}
 `
 
 type markdownData struct {
 	jsonPayloadShape
-	Narrative  string
-	TopScorers []topScorerRow
+	Narrative     string
+	TopScorers    []topScorerRow
+	NimbleUsedBy  []nimbleAttributionRow
+	NimbleEnabled bool
+}
+
+// nimbleAttributionRow names one pod that called the nimble_fetch tool, per
+// the convention in SKILL.md (the model adds `"used_nimble": true` on a
+// raw_findings entry). Surfacing this in the summary satisfies M6 acceptance
+// item #6: the artifact mentions which probes used Nimble in their path.
+type nimbleAttributionRow struct {
+	Generation int
+	PodID      string
+	Vector     string
 }
 
 type topScorerRow struct {
@@ -244,10 +267,13 @@ func (store *RunStore) renderMarkdown() ([]byte, error) {
 		return nil, err
 	}
 	payload := store.toJSONPayload("")
+	nimbleAttributions := store.collectNimbleAttributions()
 	data := markdownData{
 		jsonPayloadShape: payload,
 		Narrative:        store.buildNarrative(),
 		TopScorers:       store.collectTopScorers(5),
+		NimbleUsedBy:     nimbleAttributions,
+		NimbleEnabled:    store.NimbleEnabled,
 	}
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -316,6 +342,39 @@ func (store *RunStore) collectTopScorers(limit int) []topScorerRow {
 		})
 	}
 	return rows
+}
+
+// collectNimbleAttributions walks every scored pod and returns one row per
+// pod whose result line marked a raw_findings entry with `used_nimble:true`.
+// The pi-attacker skill instructs the model to set that flag whenever it
+// successfully invokes the nimble_fetch.sh wrapper, so the presence here is
+// the control plane's only evidence of Nimble involvement on the attack
+// path (Nimble's calls happen entirely inside the pod).
+func (store *RunStore) collectNimbleAttributions() []nimbleAttributionRow {
+	rows := make([]nimbleAttributionRow, 0)
+	for _, gen := range store.Generations {
+		for _, sg := range gen.PerPod {
+			if findingsContainNimbleFlag(sg.Result.RawFindings) {
+				rows = append(rows, nimbleAttributionRow{
+					Generation: gen.Number,
+					PodID:      sg.PodID,
+					Vector:     sg.Genome.Vector,
+				})
+			}
+		}
+	}
+	return rows
+}
+
+func findingsContainNimbleFlag(findings []map[string]any) bool {
+	for _, entry := range findings {
+		if v, ok := entry["used_nimble"]; ok {
+			if asBool, isBool := v.(bool); isBool && asBool {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func topThreeOfGeneration(gen GenerationRecord) []evolve.ScoredGenome {

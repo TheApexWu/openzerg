@@ -71,6 +71,10 @@ type AttackerPodOptions struct {
 	// Labels are merged onto the pod. An "openzerg/role: attacker" label
 	// is always added.
 	Labels map[string]string
+	// DisableNimble flips OPENZERG_DISABLE_NIMBLE=1 on the container so
+	// the in-pod nimble_fetch.sh wrapper short-circuits and returns an
+	// "ok:false" error to the model. Used by --disable-nimble.
+	DisableNimble bool
 }
 
 // BuildAttackerPod renders the real attacker Pod spec.
@@ -135,6 +139,10 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 		{Name: "POD_ID", Value: opts.PodID},
 		{Name: "RATE_LIMIT_RPS", Value: fmt.Sprintf("%d", opts.RateLimitRPS)},
 		{Name: "TIMEOUT_SECONDS", Value: fmt.Sprintf("%d", timeoutSeconds)},
+	}
+	if opts.DisableNimble {
+		containerEnv = append(containerEnv,
+			corev1.EnvVar{Name: "OPENZERG_DISABLE_NIMBLE", Value: "1"})
 	}
 
 	containerEnvFrom := []corev1.EnvFromSource{{
