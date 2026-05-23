@@ -112,7 +112,9 @@ log "invoking pi --mode json (timeout=${TIMEOUT_SECONDS}s)"
 pi_stdout_log="/tmp/pi-stdout.log"
 set +e
 timeout "${TIMEOUT_SECONDS}" pi \
+  -p \
   --mode json \
+  --no-session \
   --provider "$PI_PROVIDER" \
   --model "$PI_MODEL" \
   "$user_prompt" \
@@ -128,20 +130,41 @@ if [ -s "$pi_stdout_log" ]; then
   log "--- pi event stream (end) ---"
 fi
 
-# Look for a result line the model emitted. The skill instructs the model
-# to print a `{"type":"result",...}` line at the end of its final turn. We
-# scan from the end for the first JSON object that has "type":"result".
-final_line="$(grep -E '"type"[[:space:]]*:[[:space:]]*"result"' "$pi_stdout_log" 2>/dev/null | tail -n 1)"
+# Pi runs in `--mode json` so its stdout is a stream of event JSON objects,
+# one per line. The model's final assistant text turn is delivered as a
+# `message_end` (or wrapped inside the terminal `agent_end`) event with the
+# text in `.message.content[].text` (or `.messages[-1].content[].text`).
+#
+# A naive grep for "type":"result" matches Pi's deeply nested event JSON
+# because the substring appears in the model's text content; we want only
+# the model's *own* top-level JSON line. Use one streaming jq invocation
+# to pull every assistant text payload out, then grep for a result line.
+# A per-event jq loop is too slow on the 500m CPU pod (the event stream is
+# thousands of lines).
+final_line=""
+extracted_text="/tmp/pi-extracted-text.log"
+jq -r '
+    ( .message.content? // [] | map(select(.type=="text") | .text)[]? ),
+    ( .messages? // [] | map(.content? // [] | map(select(.type=="text") | .text)[]?)[]? )
+  ' "$pi_stdout_log" 2>/dev/null > "$extracted_text" || true
+
+# Scan extracted text from the bottom for a line that itself starts with a
+# `{"type":"result", ...}` JSON object. `grep` exits 1 with no match; the
+# explicit if-form keeps `set -e` from killing the script in that case.
+if [ -s "$extracted_text" ]; then
+  candidate=""
+  if tac "$extracted_text" | grep -m 1 -E '^\{"type":[[:space:]]*"result"' > /tmp/pi-candidate.tmp; then
+    candidate="$(cat /tmp/pi-candidate.tmp)"
+  fi
+  if [ -n "$candidate" ] && printf '%s' "$candidate" | jq -e . >/dev/null 2>&1; then
+    final_line="$candidate"
+  fi
+fi
 
 if [ -n "$final_line" ]; then
-  # Trust the model's result line as long as it parses as JSON. Validate
-  # with jq -e; on parse failure, downgrade to a NOOP.
-  if printf '%s' "$final_line" | jq -e . >/dev/null 2>&1; then
-    log "emitting model-authored result line"
-    printf '%s\n' "$final_line"
-    exit 0
-  fi
-  log "model result line did not parse as JSON; downgrading to NOOP"
+  log "emitting model-authored result line"
+  printf '%s\n' "$final_line"
+  exit 0
 fi
 
 case "$pi_exit" in

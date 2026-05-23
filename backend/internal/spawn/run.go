@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -79,14 +80,46 @@ func RunPod(ctx context.Context, cs kubernetes.Interface, pod *corev1.Pod) (*Pod
 		return nil, fmt.Errorf("spawn.RunPod: wait: %w", waitErr)
 	}
 
-	// Logs are guaranteed available once the pod is terminal. Follow=false
-	// would be more honest, but we reuse StreamLogs to keep one code path;
-	// against a finished pod, follow=true returns immediately at EOF.
+	// kubelet ingests container stdout asynchronously: a pod may transition
+	// to Succeeded a few hundred ms before the very last log lines have
+	// been written to the node-side log file the apiserver reads. Follow=true
+	// against a Succeeded pod returns whatever is *currently* in the log
+	// buffer and closes — not "wait for the rest". To avoid truncating the
+	// attacker pod's final result line we (a) wait briefly before the first
+	// read and (b) re-read until the byte count stabilises (or hit a small
+	// retry budget). Each retry sleeps to let the kubelet finish flushing.
+	select {
+	case <-time.After(1500 * time.Millisecond):
+	case <-ctx.Done():
+	}
+
 	var raw []byte
-	stream, streamErr := k8s.StreamLogs(ctx, cs, created.Namespace, created.Name, "")
-	if streamErr == nil {
-		raw, _ = io.ReadAll(stream)
+	const maxLogReadAttempts = 8
+	stableReads := 0
+	for attempt := 0; attempt < maxLogReadAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-time.After(1 * time.Second):
+			case <-ctx.Done():
+				break
+			}
+		}
+		stream, streamErr := k8s.StreamLogs(ctx, cs, created.Namespace, created.Name, "")
+		if streamErr != nil {
+			break
+		}
+		fresh, _ := io.ReadAll(stream)
 		_ = stream.Close()
+		if len(fresh) > len(raw) {
+			raw = fresh
+			stableReads = 0
+			continue
+		}
+		raw = fresh
+		stableReads++
+		if stableReads >= 2 {
+			break
+		}
 	}
 
 	res := &PodResult{Pod: final}

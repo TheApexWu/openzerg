@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T18:18:00Z (iter 0019)
+Last updated: 2026-05-23T18:58:00Z (iter 0022)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -47,12 +47,20 @@ See `RALPH_README.md` for state machine rules and update format.
     kubectl -n openzerg get pods  -> No resources found (clean)
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
-- status: IN_PROGRESS
-- summary: Pi research complete (pi.dev/docs fetched); deviation recorded — Pi uses SKILL.md (not skill.yaml). Authored docs/ARCHITECTURE.md research notes, backend/docker/pi-attacker/{Dockerfile, entrypoint.sh, skills/attacker/SKILL.md, prompts/{system,user}.tmpl}, and scripts/build-and-push-attacker.sh. Next steps: run build-and-push-attacker.sh to publish image, kubectl create the openzerg-keys Secret, update internal/spawn to render the real attacker pod spec referencing the published image + Secret, then run a 3-pod live verify.
-
-### M4 — Nimble integration inside the attacker pod
-- status: PENDING
-- summary: (not started)
+- status: ACCEPTED
+- accepted_at: 2026-05-23T18:58:00Z
+- summary: pi-attacker:latest pushed to DO registry; pinned to paid google/gemma-4-26b-a4b-it (no :free). Live 3-pod run against juice-shop emits 3 clean attacker_result_jsonl lines: pod 0 BREACHes via SQLi tautology in /rest/user/login (JWT admin token returned); pods 1-2 NOOP via entrypoint timeout fallback. Entrypoint hardened against `set -e` + grep-no-match; uses one streaming jq pass to extract model text (per-event jq loop was 100x too slow on 500m CPU). Control plane re-reads logs after pod terminal phase to defeat kubelet flush race.
+- verify_evidence: |
+    cd backend && go build ./...   -> ok
+    cd backend && go vet ./...     -> ok
+    cd backend && go test ./...    -> ok (evolve, k8s, secrets, spawn)
+    bash scripts/build-and-push-attacker.sh -> pushed
+    ./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 1
+      -> [pod 0] BREACH (sqli_login, admin token)
+         [pod 1] NOOP  (sqli_login_union timeout)
+         [pod 2] NOOP  (xss_search_reflected timeout)
+         run: ok
+    kubectl -n openzerg get pods   -> No resources found (clean)
 
 ### M5 — Evolution loop, fitness scoring, mutation, summary
 - status: PENDING
@@ -83,3 +91,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0015 | 2026-05-23T17:53:36Z | M2 | progress | cmd/openzerg run non-dry-run wired: builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes; build/vet/test green
 - iter 0019 | 2026-05-23T18:11:45Z | M2 | accepted | live DO smoke green: 3/3 busybox stub pods spawn, emit JSON, parse, and delete; pinned RunAsUser=65532 to clear RunAsNonRoot admission
 - iter 0019 | 2026-05-23T18:18:00Z | M3 | progress | Pi research + scaffolded Dockerfile, entrypoint, SKILL.md, prompts, build script; deviation recorded (Pi uses SKILL.md, not skill.yaml)
+- iter 0022 | 2026-05-23T18:58:00Z | M3 | accepted | pi-attacker live; paid Gemma 4 pinned; 3-pod run BREACH+NOOP+NOOP; entrypoint set -e fixes + single-pass jq extraction; control plane post-completion log re-reads

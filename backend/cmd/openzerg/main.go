@@ -10,7 +10,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/TheApexWu/openzerg/backend/internal/attacks"
 	"github.com/TheApexWu/openzerg/backend/internal/config"
 	"github.com/TheApexWu/openzerg/backend/internal/k8s"
 	"github.com/TheApexWu/openzerg/backend/internal/secrets"
@@ -184,14 +184,13 @@ func defaultEnvPath() string {
 	return filepath.Join(wd, ".env")
 }
 
-// runSwarm is the M2 cluster-touching path of `openzerg run`. It builds a
-// clientset from the resolved kubeconfig, renders --population busybox stub
-// pods (each emitting a unique synthetic result JSON), fans them out via
+// runSwarm is the cluster-touching path of `openzerg run`. It builds a
+// clientset from the resolved kubeconfig, renders --population attacker
+// pods (one per seed genome, deterministically), fans them out via
 // spawn.RunPods, and prints each outcome. Generations are not yet looped:
-// this is the smallest end-to-end "the swarm spawns and reports" wiring.
+// the run-loop currently spawns generation 1 only and exits.
 //
-// Real PI attacker images and fitness scoring land in M3+. For now this is
-// enough to verify the kube path against the live DO cluster.
+// Fitness scoring and survivor mutation land in M5.
 func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
 	cr, err := k8s.BuildClientset(cfg.KubeconfigPath)
 	if err != nil {
@@ -199,35 +198,30 @@ func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
 	}
 	fmt.Fprintln(stdout, "")
 	fmt.Fprintf(stdout, "kube client: ready (in-cluster=%t)\n", cr.InCluster)
-	fmt.Fprintf(stdout, "spawning %d stub pod(s) in namespace %q...\n", cfg.Population, cfg.Namespace)
+	fmt.Fprintf(stdout, "spawning %d attacker pod(s) in namespace %q...\n", cfg.Population, cfg.Namespace)
+
+	runID := fmt.Sprintf("r%d", time.Now().Unix())
+	genomes := attacks.PickSeedGenomes(cfg.Population)
 
 	pods := make([]*corev1.Pod, 0, cfg.Population)
-	runID := fmt.Sprintf("r%d", time.Now().Unix())
-	for i := 0; i < cfg.Population; i++ {
-		final := map[string]any{
-			"type":        "result",
-			"run_id":      runID,
-			"pod_id":      fmt.Sprintf("%s-p%d", runID, i),
-			"generation":  1,
-			"vector":      "stub",
-			"category":    "stub",
-			"status":      "NOOP",
-			"fitness":     0.0,
-			"evidence":    "M2 busybox stub pod",
-			"raw_findings": []any{},
-			"duration_ms": 0,
-			"t":           time.Now().UnixMilli(),
-		}
-		buf, _ := json.Marshal(final)
-		p, perr := spawn.BuildBusyboxPod(spawn.PodOptions{
-			Name:      fmt.Sprintf("openzerg-stub-%s-p%d", runID, i),
-			Namespace: cfg.Namespace,
-			FinalJSON: string(buf),
+	for i, genome := range genomes {
+		podID := fmt.Sprintf("%s-p%d", runID, i)
+		pod, perr := spawn.BuildAttackerPod(spawn.AttackerPodOptions{
+			Name:           fmt.Sprintf("openzerg-attacker-%s-p%d", runID, i),
+			Namespace:      cfg.Namespace,
+			Image:          cfg.AttackerImage,
+			Genome:         genome,
+			RunID:          runID,
+			PodID:          podID,
+			Generation:     1,
+			TargetURL:      cfg.TargetURL,
+			RateLimitRPS:   cfg.RateLimitRPS,
+			TimeoutSeconds: 60,
 		})
 		if perr != nil {
 			return fmt.Errorf("run: build pod %d: %w", i, perr)
 		}
-		pods = append(pods, p)
+		pods = append(pods, pod)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -242,7 +236,11 @@ func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
 			continue
 		}
 		if o.Result == nil || len(o.Result.RawLine) == 0 {
-			fmt.Fprintf(stdout, "[pod %d] no result line (parse=%v)\n", o.Index, o.Result.ParseError)
+			parseErr := error(nil)
+			if o.Result != nil {
+				parseErr = o.Result.ParseError
+			}
+			fmt.Fprintf(stdout, "[pod %d] no result line (parse=%v)\n", o.Index, parseErr)
 			continue
 		}
 		fmt.Fprintf(stdout, "[pod %d] %s\n", o.Index, string(o.Result.RawLine))
