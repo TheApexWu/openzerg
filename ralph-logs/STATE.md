@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T17:38:24Z (iter 0005)
+Last updated: 2026-05-23T17:40:29Z (iter 0006)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -36,7 +36,7 @@ See `RALPH_README.md` for state machine rules and update format.
 
 ### M2 — K8s pod spawn + log streaming (no PI yet)
 - status: IN_PROGRESS
-- summary: evolve.ParseLastJSONLine + hostile-input tests done; namespace.yaml manifest added; client-go pod spawn still TODO.
+- summary: ParseLastJSONLine + namespace.yaml + spawn.BuildBusyboxPod manifest renderer (k8s.io/api types) with tests; client-go cluster I/O (CreatePod/StreamLogs/Delete) still TODO.
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
 - status: PENDING
@@ -64,3 +64,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0003 | 2026-05-23T17:35:24Z | M1 | accepted | secrets loader + flags + kubeconfig probe; doctor and run --dry-run wired; tests green
 - iter 0004 | 2026-05-23T17:37:13Z | M2 | progress | evolve.ParseLastJSONLine + hostile-input tests; client-go spawn next
 - iter 0005 | 2026-05-23T17:38:24Z | M2 | progress | added backend/deploy/namespace.yaml manifest for openzerg ns
+- iter 0006 | 2026-05-23T17:40:29Z | M2 | progress | spawn.BuildBusyboxPod renders busybox pod manifest with k8s.io/api types; tests pass
