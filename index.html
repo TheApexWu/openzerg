@@ -92,8 +92,20 @@
   .defense-strip {
     grid-column: 1 / span 3; grid-row: 1;
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 10px 16px; background: var(--panel-strong);
-    font-size: 11px; min-height: 38px;
+    padding: 8px 16px; background: var(--panel-strong);
+    font-size: 11px; min-height: 44px;
+  }
+  .defense-strip .brand-mark {
+    width: 28px; height: 28px; flex-shrink: 0;
+    background: #000 url('./zerg.svg') no-repeat center/contain;
+    border: 1px solid var(--border);
+  }
+  .defense-strip .brand-word {
+    color: var(--ink); font-size: 13px; font-weight: 760;
+    letter-spacing: -0.01em; margin-right: 6px;
+  }
+  .defense-strip .brand-divider {
+    width: 1px; height: 22px; background: var(--border); margin: 0 6px;
   }
   .defense-strip .label {
     color: var(--dim); font-size: 11px; letter-spacing: 0.13em;
@@ -555,6 +567,7 @@
 
   <!-- Top row 1: defense posture (CON-341) -->
   <div class="defense-strip" id="defense-strip"></div>
+  <!-- (defense-strip rendered into via JS — brand is injected at render time) -->
 
   <!-- Top row 2: generation pill bar (CON-334) -->
   <div class="gen-pill-bar" id="gen-pill-bar">
@@ -1512,6 +1525,9 @@ function renderDefenseStrip() {
     `<span class="layer ${l.on ? 'on' : 'off'}"><span class="mark">${l.on ? '✓' : '✗'}</span>${l.name}</span>`
   ).join('');
   defenseStripEl.innerHTML = `
+    <div class="brand-mark" aria-hidden="true"></div>
+    <span class="brand-word">OpenZerg</span>
+    <div class="brand-divider" aria-hidden="true"></div>
     <span class="label">DEFENSE:</span>
     <select id="defense-config-select">
       <option value="permissive" ${currentConfig === 'permissive' ? 'selected' : ''}>permissive</option>
