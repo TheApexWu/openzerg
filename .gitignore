@@ -1,4 +1,6 @@
 assets/
+
+# Python / local backend artifacts
 __pycache__/
 *.pyc
 *.pyo
@@ -6,9 +8,36 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+
+# Local secrets — never commit API keys.
+.env
+.env.*
+!.env.example
+
+# Local briefs / generated docs / asset bundles used during hackathon prep.
 OPENZERG_DOCS.md
 OPERZERG_PIVOT.md
 OPERZERG_DOCS.html
 OPENZERG_PIVOT.html
+OPENZERG_PIVOT.pdf
 zerg-carson-plan.pdf
+openzerg-assets.zip
+
+# Conversation transcript scratch from prep session — not source.
+Untitled
+
+# Local node / build artifacts (if added later)
+node_modules/
+dist/
+.cache/
+
+# Editor / OS
 .DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
