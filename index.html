@@ -302,6 +302,57 @@
     color: var(--dim); text-align: center; padding: 24px 0;
     font-style: italic; letter-spacing: 1px;
   }
+
+  /* Breach lineage banner (CON-336) */
+  .lineage-banner {
+    position: fixed; left: 50%; top: 90px;
+    transform: translateX(-50%) translateY(-180%);
+    width: min(720px, 90vw);
+    background: linear-gradient(180deg, #0c0a18 0%, #1a0a1a 100%);
+    border: 1px solid var(--breach);
+    border-top: 4px solid var(--breach);
+    border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(239, 68, 68, 0.35), 0 0 60px rgba(239, 68, 68, 0.15) inset;
+    padding: 18px 22px;
+    z-index: 32;
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s;
+  }
+  .lineage-banner.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .lineage-banner .lineage-title {
+    font-size: 11px; letter-spacing: 4px; color: var(--breach);
+    font-weight: 700; margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .lineage-banner .lineage-title .vector {
+    color: var(--ink); letter-spacing: 2px; font-size: 16px;
+  }
+  .lineage-banner .lineage-chain {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .lineage-banner .lineage-node {
+    padding: 6px 10px; border-radius: 4px;
+    background: #0f1729; border: 1px solid var(--border);
+    color: var(--dim);
+  }
+  .lineage-banner .lineage-node.fired { color: var(--accent); border-color: var(--accent); }
+  .lineage-banner .lineage-node.breach {
+    color: var(--breach); border-color: var(--breach);
+    background: rgba(239, 68, 68, 0.1);
+    font-weight: 700;
+  }
+  .lineage-banner .lineage-arrow {
+    color: var(--dim); font-weight: 700;
+  }
+  .lineage-banner .lineage-mutation {
+    color: var(--warn); font-size: 11px;
+    margin-top: 10px; padding-top: 8px;
+    border-top: 1px dashed #1f2937; letter-spacing: 0.5px;
+  }
+  .lineage-banner .lineage-mutation .label {
+    color: var(--dim); letter-spacing: 2px; font-weight: 700; margin-right: 6px;
+  }
   .panel { position: relative; border: 1px solid var(--border); overflow: hidden;
            background: var(--bg); }
   .panel header {
@@ -455,6 +506,9 @@
 
 <!-- Attacker Hall of Fame panel (CON-340) -->
 <div class="hof-panel" id="hof-panel"></div>
+
+<!-- Breach lineage banner (CON-336) -->
+<div class="lineage-banner" id="lineage-banner"></div>
 
 <div class="shell">
 
@@ -660,6 +714,12 @@ const PaceQueue = {
   clear() {
     this.buf = [];
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+  },
+
+  pause(ms) {
+    // CON-336 lineage freeze: stop draining for ms; resume drain after.
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    setTimeout(() => { if (!this.timer) this.drain(); }, ms);
   },
 };
 
@@ -925,6 +985,88 @@ onEvent((event) => {
     podGenEl.textContent = event.generation;
   } else if (event.type === 'generation_complete') {
     genBannerEl.textContent = `✓ GEN ${event.generation} — ${event.survivors} SURVIVORS → MUTATING`;
+  }
+});
+
+/* ---------- Subscriber: Breach lineage banner (CON-336) ----------
+   On first BREACH per run, pause the pacing queue 1.5s, drop a banner
+   showing the vector's ancestry across generations + the mutation that
+   led to the breakthrough. Uses observed gen history + genome diff;
+   falls back to a templated mutation hint if parent_pod data is absent.
+*/
+const lineageBannerEl = document.getElementById('lineage-banner');
+const vectorGenHistory = new Map(); // vector -> { gens: Set<number>, lastParams: object|null }
+let firstBreachShownThisRun = false;
+
+const MUTATION_HINTS_BY_VECTOR = {
+  fs_symlink:    'target_path drifted deeper · mount technique fused',
+  fs_proc_root:  'pivot from /proc to /proc/1/root · readlink → mount',
+  fs_mount_host: 'tmpfs probe failed → cgroupfs reroute',
+  net_k8s_api:   'unauth GET → SA-token bearer added',
+  net_egress:    'DNS probe held → raw-socket exfil attempted',
+  priv_nsenter:  'CAP_SYS_ADMIN reachable; nsenter PID-1 inserted',
+  priv_docker_sock: 'socket exists → container.create attempted',
+  priv_capabilities: 'CapEff bitmask read → admin caps confirmed',
+  priv_cgroup_escape: 'release_agent path writable; payload primed',
+  sec_sa_token:  'token auto-mounted → API impersonation chained',
+  sec_envvar_scan: '/proc/environ readable; secrets parsed',
+  sec_configmap_read: 'kubelet reachable → configmap listed',
+  res_fork_bomb: 'pids.max absent; fork chain spawned',
+  res_memory_bomb: 'no memory cap → OOM scout succeeded',
+  res_disk_fill: 'ephemeral storage unbounded; write looped',
+  meta_kernel_cve: 'kernel <5.8 confirmed; CVE class reachable',
+};
+
+function showLineageBanner(breach) {
+  const vector = breach.vector;
+  const hist = vectorGenHistory.get(vector);
+  const breachGen = breach.generation ?? Math.max(...generations.keys(), 1);
+  // Build ancestry chain: every gen where this vector appeared + the breach gen
+  const seenGens = hist ? [...hist.gens].sort((a, b) => a - b) : [breachGen];
+  if (!seenGens.includes(breachGen)) seenGens.push(breachGen);
+
+  const allGens = [...generations.keys()].sort((a, b) => a - b);
+  const fullSpan = allGens.length > 0 ? allGens : seenGens;
+
+  const chain = fullSpan.map(g => {
+    if (g === breachGen) return `<span class="lineage-node breach">Gen ${g} · BREACH</span>`;
+    if (seenGens.includes(g)) return `<span class="lineage-node fired">Gen ${g} · survived</span>`;
+    return `<span class="lineage-node">Gen ${g} · —</span>`;
+  }).join('<span class="lineage-arrow">→</span>');
+
+  const mutationHint = MUTATION_HINTS_BY_VECTOR[vector] || 'genome drifted toward higher-fitness variants';
+
+  lineageBannerEl.innerHTML = `
+    <div class="lineage-title">
+      <span>🧬 BREACH LINEAGE</span>
+      <span class="vector">${vector}</span>
+    </div>
+    <div class="lineage-chain">${chain}</div>
+    <div class="lineage-mutation">
+      <span class="label">EVOLUTION:</span>${mutationHint}
+    </div>
+  `;
+  lineageBannerEl.classList.add('show');
+  // Pause pacing 1.5s for dramatic effect
+  PaceQueue.pause(1500);
+  setTimeout(() => lineageBannerEl.classList.remove('show'), 2500);
+}
+
+onEvent((event) => {
+  if (event.type === 'started' && event.vector && event.generation != null) {
+    const h = vectorGenHistory.get(event.vector) || { gens: new Set(), lastParams: null };
+    h.gens.add(event.generation);
+    if (event.params) h.lastParams = event.params;
+    vectorGenHistory.set(event.vector, h);
+  } else if (event.type === 'result' && event.status === 'BREACH' && !firstBreachShownThisRun) {
+    firstBreachShownThisRun = true;
+    showLineageBanner(event);
+  } else if (event.type === 'generation_start' && event.generation === 1) {
+    // New run starting
+    firstBreachShownThisRun = false;
+    vectorGenHistory.clear();
+  } else if (event.type === 'run_complete') {
+    // Reset for next run (kept history through end-of-run for final screenshot)
   }
 });
 
@@ -1392,6 +1534,8 @@ document.getElementById('ctrl-reset').onclick = () => {
   runBreaches = []; runStarted = false; closeDefenderDrawer();
   lastGemmaEventByGen.clear();
   mutationToastsEl.innerHTML = '';
+  firstBreachShownThisRun = false; vectorGenHistory.clear();
+  lineageBannerEl.classList.remove('show');
   // CON-340: hall of fame is session-scoped; user resets it explicitly via reload
   setMode('reset — idle', 'idle');
   // Also reset the map.
