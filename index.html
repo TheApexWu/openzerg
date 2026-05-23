@@ -214,7 +214,7 @@
     font-size: 12px; line-height: 1.5;
     color: var(--ink);
     opacity: 0; transform: translateX(20px);
-    animation: toastIn 0.3s var(--ease-out) forwards, toastOut 0.4s var(--ease-in-out) 2.7s forwards;
+    animation: toastIn 0.4s var(--ease-out) forwards, toastOut 0.6s var(--ease-in-out) 6.5s forwards;
   }
   .mutation-toast .toast-header {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -600,13 +600,13 @@
       <span class="mode-display" id="mode-display">booting…</span>
     </div>
     <div class="group">
-      <button class="live"    id="ctrl-live">LIVE</button>
-      <button class="replay"  id="ctrl-replay">REPLAY</button>
-      <button class="primary" id="ctrl-auto">AUTO</button>
+      <button class="live mode-btn"   id="ctrl-live">LIVE</button>
+      <button class="replay mode-btn" id="ctrl-replay">REPLAY</button>
+      <button class="mode-btn"        id="ctrl-auto">AUTO</button>
     </div>
     <div class="group">
-      <button id="ctrl-play-replay">▶ PLAY REPLAY</button>
-      <button id="ctrl-reset">⟲ RESET</button>
+      <button id="ctrl-play-replay">PLAY REPLAY</button>
+      <button id="ctrl-reset">RESET</button>
     </div>
     <div class="group launch-ra2">
       <span class="label">LAUNCH:</span>
@@ -631,7 +631,7 @@
       <button class="char-btn" data-category="privilege" data-sprite="atk_gi" title="GI — privilege probe">
         <img src="./assets/ra-2-sprites/gi_thumb.png" alt="GI">
       </button>
-      <button class="swarm-btn" id="ctrl-swarm-ra2">⚡ SWARM x20</button>
+      <button class="swarm-btn" id="ctrl-swarm-ra2">SWARM x20</button>
     </div>
     <div class="group launch-tactical">
       <span class="label">LAUNCH:</span>
@@ -640,7 +640,7 @@
       <button class="text-launch-btn" data-category="privilege">PRIV</button>
       <button class="text-launch-btn" data-category="secrets">SEC</button>
       <button class="text-launch-btn" data-category="resource">RES</button>
-      <button class="swarm-btn" id="ctrl-swarm-tactical">⚡ SWARM x20</button>
+      <button class="swarm-btn" id="ctrl-swarm-tactical">SWARM x20</button>
     </div>
     <div class="group">
       <span class="label">SKIN:</span>
@@ -654,8 +654,8 @@
     </div>
     <div class="spacer"></div>
     <div class="group">
-      <button class="hof-toggle" id="ctrl-hof">🏆 HALL OF FAME</button>
-      <button id="ctrl-screenshot">📸 SCREENSHOT</button>
+      <button class="hof-toggle" id="ctrl-hof">HALL OF FAME</button>
+      <button id="ctrl-screenshot">SCREENSHOT</button>
     </div>
   </div>
 
@@ -734,7 +734,9 @@ function normalizeEvent(raw) {
    bypass — reading scrolling text doesn't need dramatic timing. */
 const PaceQueue = {
   buf: [], timer: null,
-  minMs: 300, maxMs: 700, catchUpMs: 200, catchUpThresh: 15,
+  // Slower pacing for longer demo content (was 300/700/200).
+  // Yields ~2.5x the run length so a single replay fills a 3-min video.
+  minMs: 700, maxMs: 1500, catchUpMs: 350, catchUpThresh: 20,
 
   push(canonical) {
     if (!canonical) return;
@@ -790,8 +792,10 @@ function stopLiveSource() {
   if (liveSocket) { try { liveSocket.close(); } catch {} liveSocket = null; }
 }
 
+let replayLoopTimer = null;
 async function startReplaySource(path) {
   stopReplaySource();
+  if (replayLoopTimer) { clearTimeout(replayLoopTimer); replayLoopTimer = null; }
   setMode('replay (loading…)', 'idle');
   let data;
   try { data = await fetch(path).then(r => r.json()); }
@@ -852,6 +856,15 @@ function bootMode() {
 }
 
 /* ---------- Mode display ---------- */
+function setActiveModeButton(which) {
+  // which: 'live' | 'replay' | 'auto' | null
+  ['ctrl-live', 'ctrl-replay', 'ctrl-auto'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('active', id === 'ctrl-' + which);
+  });
+}
+
 function setMode(text, badgeClass) {
   document.getElementById('mode-display').textContent = text;
   const badges = ['kubectl-badge', 'terminal-badge'];
@@ -1088,9 +1101,11 @@ function showLineageBanner(breach) {
     </div>
   `;
   lineageBannerEl.classList.add('show');
-  // Pause pacing 1.5s for dramatic effect
-  PaceQueue.pause(1500);
-  setTimeout(() => lineageBannerEl.classList.remove('show'), 2500);
+  // Pause pacing 2.5s so it lands cleanly on screen for the camera.
+  PaceQueue.pause(2500);
+  // Stay visible 8s, then fade. Next `generation_start` also closes it.
+  if (lineageBannerEl._hideTimer) clearTimeout(lineageBannerEl._hideTimer);
+  lineageBannerEl._hideTimer = setTimeout(() => lineageBannerEl.classList.remove('show'), 8000);
 }
 
 onEvent((event) => {
@@ -1102,12 +1117,13 @@ onEvent((event) => {
   } else if (event.type === 'result' && event.status === 'BREACH' && !firstBreachShownThisRun) {
     firstBreachShownThisRun = true;
     showLineageBanner(event);
-  } else if (event.type === 'generation_start' && event.generation === 1) {
-    // New run starting
-    firstBreachShownThisRun = false;
-    vectorGenHistory.clear();
-  } else if (event.type === 'run_complete') {
-    // Reset for next run (kept history through end-of-run for final screenshot)
+  } else if (event.type === 'generation_start') {
+    // Close lineage banner cleanly when the next generation begins
+    lineageBannerEl.classList.remove('show');
+    if (event.generation === 1) {
+      firstBreachShownThisRun = false;
+      vectorGenHistory.clear();
+    }
   }
 });
 
@@ -1160,7 +1176,7 @@ function renderHof() {
     <div class="hof-header">
       <span class="hof-title">🏆 ATTACKER HALL OF FAME</span>
       <span class="hof-subtitle">session · ${vectorStats.size} vectors observed</span>
-      <button class="hof-close" id="hof-close-btn">CLOSE ✕</button>
+      <button class="hof-close" id="hof-close-btn">CLOSE</button>
     </div>
     <div class="hof-sort">
       <button class="${hofSortBy === 'breaches' ? 'active' : ''}" data-sort="breaches">BY BREACHES</button>
@@ -1227,7 +1243,7 @@ function showMutationToast({ fromGen, toGen, summary, count, latencyMs }) {
     mutationToastsEl.removeChild(mutationToastsEl.firstChild);
   }
   // Cleanup after animation completes
-  setTimeout(() => el.remove(), 3200);
+  setTimeout(() => el.remove(), 7400);
 }
 
 onEvent((event) => {
@@ -1320,12 +1336,12 @@ function renderDefenderDrawer(runCompleteEvent) {
     <div class="drawer-header">
       <span class="drawer-title">DEFENDER REPORT</span>
       ${headerSummary}
-      <button class="drawer-close" id="drawer-close-btn">CLOSE ✕</button>
+      <button class="drawer-close" id="drawer-close-btn">CLOSE</button>
     </div>
     ${body}
     <div class="drawer-actions">
-      <button id="drawer-rerun-btn">▶ RE-RUN WITH ${otherConfig.toUpperCase()} CONFIG</button>
-      <button class="secondary" id="drawer-export-btn">📋 COPY FIX LIST</button>
+      <button id="drawer-rerun-btn">RE-RUN WITH ${otherConfig.toUpperCase()} CONFIG</button>
+      <button class="secondary" id="drawer-export-btn">COPY FIX LIST</button>
     </div>
   `;
   document.getElementById('drawer-close-btn').onclick = closeDefenderDrawer;
@@ -1383,6 +1399,16 @@ onEvent((event) => {
   } else if (event.type === 'run_complete') {
     renderDefenderDrawer(event);
     runStarted = false;
+    // Auto-loop replay so the demo stays alive
+    const modeText = document.getElementById('mode-display').textContent || '';
+    if (modeText.startsWith('REPLAY') || modeText.startsWith('AUTO → REPLAY')) {
+      if (replayLoopTimer) clearTimeout(replayLoopTimer);
+      replayLoopTimer = setTimeout(() => {
+        closeDefenderDrawer();
+        document.getElementById('ctrl-reset').click();
+        setTimeout(() => startReplaySource(REPLAY_PATH), 400);
+      }, 8000);
+    }
   }
 });
 
@@ -1561,10 +1587,10 @@ function renderPods(freshPod) {
 }
 
 /* ---------- Bottom control wiring ---------- */
-document.getElementById('ctrl-live').onclick = () => startLiveSource(WS_URL);
-document.getElementById('ctrl-replay').onclick = () => startReplaySource(REPLAY_PATH);
-document.getElementById('ctrl-auto').onclick = () => bootMode();
-document.getElementById('ctrl-play-replay').onclick = () => startReplaySource(REPLAY_PATH);
+document.getElementById('ctrl-live').onclick   = () => { setActiveModeButton('live');   startLiveSource(WS_URL); };
+document.getElementById('ctrl-replay').onclick = () => { setActiveModeButton('replay'); startReplaySource(REPLAY_PATH); };
+document.getElementById('ctrl-auto').onclick   = () => { setActiveModeButton('auto');   bootMode(); };
+document.getElementById('ctrl-play-replay').onclick = () => { setActiveModeButton('replay'); startReplaySource(REPLAY_PATH); };
 document.getElementById('ctrl-reset').onclick = () => {
   stopLiveSource(); stopReplaySource(); PaceQueue.clear();
   podState.clear(); podRowsEl.innerHTML = '';
@@ -1577,6 +1603,7 @@ document.getElementById('ctrl-reset').onclick = () => {
   mutationToastsEl.innerHTML = '';
   firstBreachShownThisRun = false; vectorGenHistory.clear();
   lineageBannerEl.classList.remove('show');
+  setActiveModeButton(null);
   // CON-340: hall of fame is session-scoped; user resets it explicitly via reload
   setMode('reset — idle', 'idle');
   // Also reset the map.
