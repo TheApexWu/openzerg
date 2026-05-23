@@ -71,10 +71,16 @@
   .scar {
     position: absolute; width: 18px; height: 18px;
     transform: translate(-50%, -50%);
-    border: 1px solid currentColor; background: currentColor; opacity: 0.55;
+    border: 1px solid currentColor; background: currentColor; opacity: 0.6;
     cursor: help;
   }
-  .scar:hover, .probe:hover { opacity: 1; }
+  .held-mark {
+    position: absolute; width: 9px; height: 9px;
+    transform: translate(-50%, -50%);
+    border: 1px solid currentColor; background: transparent; opacity: 0.5;
+    border-radius: 50%; cursor: help;
+  }
+  .scar:hover, .held-mark:hover, .probe:hover { opacity: 1; }
 
   .footer-meta {
     position: absolute; bottom: 18px; left: 22px;
@@ -168,15 +174,19 @@
     });
     timers.push(setTimeout(() => {
       p.el.classList.add('hit');
+      // Always leave a persistent mark so the perimeter tells a story too.
+      const mark = document.createElement('div');
       if (status === 'BREACH') {
-        const scar = document.createElement('div');
-        scar.className = 'scar';
-        scar.style.left = ex + '%';
-        scar.style.top  = ey + '%';
-        scar.style.color = color;
-        scar.title = `BREACH — ${p.vector || pod}\ncategory: ${p.category || '—'}\nfitness: ${fitness.toFixed(2)}${evidence ? '\nevidence: ' + evidence : ''}`;
-        arena.appendChild(scar);
+        mark.className = 'scar';
+        mark.title = `BREACH — ${p.vector || pod}\ncategory: ${p.category || '—'}\nfitness: ${fitness.toFixed(2)}${evidence ? '\nevidence: ' + evidence : ''}`;
+      } else {
+        mark.className = 'held-mark';
+        mark.title = `HELD — ${p.vector || pod}\ncategory: ${p.category || '—'}\nfitness: ${fitness.toFixed(2)}${evidence ? '\nblocked by: ' + evidence : ''}`;
       }
+      mark.style.left = ex + '%';
+      mark.style.top  = ey + '%';
+      mark.style.color = color;
+      arena.appendChild(mark);
       timers.push(setTimeout(() => { p.el.remove(); probesByPod.delete(pod); }, 260));
     }, 760));
     if (status === 'BREACH') counters.breach++;
@@ -187,7 +197,7 @@
 
   function reset() {
     timers.forEach(clearTimeout); timers = [];
-    [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
+    [...arena.querySelectorAll('.probe,.scar,.held-mark')].forEach(n => n.remove());
     probesByPod.clear();
     probeIndex = 0;
     counters = { probes: 0, held: 0, breach: 0 };
