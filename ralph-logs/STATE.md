@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T18:11:45Z (iter 0019)
+Last updated: 2026-05-23T18:18:00Z (iter 0019)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -47,8 +47,8 @@ See `RALPH_README.md` for state machine rules and update format.
     kubectl -n openzerg get pods  -> No resources found (clean)
 
 ### M3 — Attacker pod image with PI + Gemma 4 (no Nimble yet)
-- status: PENDING
-- summary: (not started)
+- status: IN_PROGRESS
+- summary: Pi research complete (pi.dev/docs fetched); deviation recorded — Pi uses SKILL.md (not skill.yaml). Authored docs/ARCHITECTURE.md research notes, backend/docker/pi-attacker/{Dockerfile, entrypoint.sh, skills/attacker/SKILL.md, prompts/{system,user}.tmpl}, and scripts/build-and-push-attacker.sh. Next steps: run build-and-push-attacker.sh to publish image, kubectl create the openzerg-keys Secret, update internal/spawn to render the real attacker pod spec referencing the published image + Secret, then run a 3-pod live verify.
 
 ### M4 — Nimble integration inside the attacker pod
 - status: PENDING
@@ -82,3 +82,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0014 | 2026-05-23T17:51:42Z | M2 | progress | spawn.RunPods concurrent fan-out (sync.WaitGroup, ordered outcomes); 2 nil/empty tests; build/vet/test green
 - iter 0015 | 2026-05-23T17:53:36Z | M2 | progress | cmd/openzerg run non-dry-run wired: builds clientset, renders N busybox stubs, fans out via spawn.RunPods, prints outcomes; build/vet/test green
 - iter 0019 | 2026-05-23T18:11:45Z | M2 | accepted | live DO smoke green: 3/3 busybox stub pods spawn, emit JSON, parse, and delete; pinned RunAsUser=65532 to clear RunAsNonRoot admission
+- iter 0019 | 2026-05-23T18:18:00Z | M3 | progress | Pi research + scaffolded Dockerfile, entrypoint, SKILL.md, prompts, build script; deviation recorded (Pi uses SKILL.md, not skill.yaml)
