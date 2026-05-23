@@ -174,6 +174,134 @@
   }
   .defender-drawer .drawer-actions button:hover { transform: translateY(-1px); }
   .defender-drawer .drawer-actions button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Mutation receipt toasts (CON-335) */
+  .mutation-toasts {
+    position: fixed; top: 80px; right: 18px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 25; pointer-events: none;
+    max-width: 340px;
+  }
+  .mutation-toast {
+    background: #0f172a;
+    border: 1px solid #a855f7;
+    border-left: 3px solid #a855f7;
+    box-shadow: 0 4px 18px rgba(168, 85, 247, 0.25);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 11px; line-height: 1.45;
+    color: var(--ink); letter-spacing: 0.4px;
+    opacity: 0; transform: translateX(20px);
+    animation: toastIn 0.3s ease forwards, toastOut 0.4s ease 2.7s forwards;
+  }
+  .mutation-toast .toast-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    color: #a855f7; font-size: 10px; font-weight: 700;
+    letter-spacing: 2px; margin-bottom: 6px;
+  }
+  .mutation-toast .toast-header .latency {
+    color: var(--dim); font-weight: 400; letter-spacing: 0.5px;
+  }
+  .mutation-toast .toast-body { color: var(--ink); font-family: 'JetBrains Mono', monospace; }
+  .mutation-toast .toast-meta {
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px dashed #1f2937;
+    color: var(--dim); font-size: 10px; letter-spacing: 1px;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes toastOut {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(20px); }
+  }
+
+  /* Attacker Hall of Fame (CON-340) */
+  .hof-toggle {
+    background: transparent; color: var(--ink);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 10px; font-family: inherit; font-size: 11px;
+    letter-spacing: 1px; cursor: pointer;
+  }
+  .hof-toggle:hover { border-color: #f59e0b; color: #f59e0b; }
+  .hof-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 420px; background: #050b15;
+    border-left: 2px solid #f59e0b;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.5);
+    transform: translateX(110%);
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    z-index: 28;
+    padding: 18px 22px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .hof-panel.open { transform: translateX(0); }
+  .hof-panel .hof-header {
+    display: flex; align-items: baseline; gap: 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px;
+  }
+  .hof-panel .hof-title {
+    font-size: 12px; letter-spacing: 3px; color: #f59e0b; font-weight: 700;
+  }
+  .hof-panel .hof-subtitle {
+    font-size: 10px; color: var(--dim); letter-spacing: 1px;
+  }
+  .hof-panel .hof-close {
+    margin-left: auto;
+    background: transparent; color: var(--dim);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 3px 8px; cursor: pointer; font-family: inherit; font-size: 10px;
+  }
+  .hof-panel .hof-close:hover { color: var(--ink); border-color: var(--ink); }
+  .hof-panel .hof-sort {
+    display: flex; gap: 6px; margin-bottom: 12px;
+  }
+  .hof-panel .hof-sort button {
+    background: transparent; color: var(--dim);
+    border: 1px solid var(--border); border-radius: 3px;
+    padding: 4px 8px; font-family: inherit; font-size: 10px;
+    letter-spacing: 1px; cursor: pointer;
+  }
+  .hof-panel .hof-sort button.active {
+    color: #f59e0b; border-color: #f59e0b;
+  }
+  .hof-panel .hof-row {
+    display: grid; grid-template-columns: 24px 1fr auto auto;
+    gap: 10px; padding: 8px 0;
+    border-bottom: 1px dashed #1f2937;
+    align-items: baseline;
+  }
+  .hof-panel .hof-row .rank {
+    color: var(--dim); font-weight: 700; font-size: 12px;
+  }
+  .hof-panel .hof-row.top1 .rank { color: #f59e0b; }
+  .hof-panel .hof-row.top2 .rank { color: #c084fc; }
+  .hof-panel .hof-row.top3 .rank { color: #38bdf8; }
+  .hof-panel .hof-row .vector {
+    color: var(--ink); font-weight: 600;
+  }
+  .hof-panel .hof-row .vector .cat {
+    display: block; font-size: 9px; color: var(--dim);
+    letter-spacing: 1px; margin-top: 2px;
+  }
+  .hof-panel .hof-row .vector .cat.filesystem { color: var(--fs); }
+  .hof-panel .hof-row .vector .cat.network    { color: var(--net); }
+  .hof-panel .hof-row .vector .cat.privilege  { color: var(--priv); }
+  .hof-panel .hof-row .vector .cat.secrets    { color: var(--sec); }
+  .hof-panel .hof-row .vector .cat.resource   { color: var(--res); }
+  .hof-panel .hof-row .fit {
+    color: var(--accent); font-family: monospace; font-size: 11px;
+  }
+  .hof-panel .hof-row .breaches {
+    color: var(--breach); font-weight: 700; font-size: 11px;
+  }
+  .hof-panel .hof-row .breaches.zero { color: var(--dim); font-weight: 400; }
+  .hof-panel .hof-empty {
+    color: var(--dim); text-align: center; padding: 24px 0;
+    font-style: italic; letter-spacing: 1px;
+  }
   .panel { position: relative; border: 1px solid var(--border); overflow: hidden;
            background: var(--bg); }
   .panel header {
@@ -322,6 +450,12 @@
 <!-- Defender Report drawer (CON-337) -->
 <div class="defender-drawer" id="defender-drawer"></div>
 
+<!-- Mutation toasts (CON-335) -->
+<div class="mutation-toasts" id="mutation-toasts"></div>
+
+<!-- Attacker Hall of Fame panel (CON-340) -->
+<div class="hof-panel" id="hof-panel"></div>
+
 <div class="shell">
 
   <!-- Top row 1: defense posture (CON-341) -->
@@ -425,6 +559,7 @@
     </div>
     <div class="spacer"></div>
     <div class="group">
+      <button class="hof-toggle" id="ctrl-hof">🏆 HALL OF FAME</button>
       <button id="ctrl-screenshot">📸 SCREENSHOT</button>
     </div>
   </div>
@@ -793,6 +928,157 @@ onEvent((event) => {
   }
 });
 
+/* ---------- Subscriber: Attacker Hall of Fame (CON-340) ----------
+   Session-scoped aggregation across all observed result events.
+   Backend-merged view via /api/runs is v2 if needed.
+*/
+const hofPanelEl = document.getElementById('hof-panel');
+const vectorStats = new Map(); // vector -> { count, breaches, fitnessSum, lastSeen, category }
+let hofSortBy = 'breaches'; // 'breaches' | 'fitness'
+let hofOpen = false;
+
+function fitnessFor(event) {
+  if (typeof event.fitness === 'number') return event.fitness;
+  if (event.status === 'BREACH') return 1.0;
+  const ev = (event.evidence || '').toLowerCase();
+  if (/reachable|connected|200 ok/.test(ev)) return 0.6;
+  if (/permission denied|found|accessible/.test(ev)) return 0.4;
+  if (/timeout|refused|blocked/.test(ev)) return 0.1;
+  return 0.0;
+}
+
+function renderHof() {
+  if (!hofOpen) return;
+  const rows = [...vectorStats.entries()].map(([vector, s]) => ({
+    vector,
+    category: s.category,
+    count: s.count,
+    breaches: s.breaches,
+    avgFit: s.count > 0 ? s.fitnessSum / s.count : 0,
+  }));
+  if (hofSortBy === 'breaches') {
+    rows.sort((a, b) => b.breaches - a.breaches || b.avgFit - a.avgFit);
+  } else {
+    rows.sort((a, b) => b.avgFit - a.avgFit || b.breaches - a.breaches);
+  }
+  const body = rows.length === 0
+    ? `<div class="hof-empty">no attacks observed yet — run an evolution</div>`
+    : rows.map((r, i) => {
+        const rankCls = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '';
+        const breachCls = r.breaches === 0 ? 'zero' : '';
+        return `<div class="hof-row ${rankCls}">
+          <span class="rank">${i + 1}</span>
+          <span class="vector">${r.vector}<span class="cat ${r.category || ''}">${r.category || ''}</span></span>
+          <span class="fit">${r.avgFit.toFixed(2)}</span>
+          <span class="breaches ${breachCls}">${r.breaches}✗</span>
+        </div>`;
+      }).join('');
+  hofPanelEl.innerHTML = `
+    <div class="hof-header">
+      <span class="hof-title">🏆 ATTACKER HALL OF FAME</span>
+      <span class="hof-subtitle">session · ${vectorStats.size} vectors observed</span>
+      <button class="hof-close" id="hof-close-btn">CLOSE ✕</button>
+    </div>
+    <div class="hof-sort">
+      <button class="${hofSortBy === 'breaches' ? 'active' : ''}" data-sort="breaches">BY BREACHES</button>
+      <button class="${hofSortBy === 'fitness'  ? 'active' : ''}" data-sort="fitness">BY FITNESS</button>
+    </div>
+    ${body}
+  `;
+  document.getElementById('hof-close-btn').onclick = () => { hofOpen = false; hofPanelEl.classList.remove('open'); };
+  hofPanelEl.querySelectorAll('[data-sort]').forEach(btn => {
+    btn.onclick = () => { hofSortBy = btn.dataset.sort; renderHof(); };
+  });
+}
+
+function toggleHof() {
+  hofOpen = !hofOpen;
+  if (hofOpen) { renderHof(); hofPanelEl.classList.add('open'); }
+  else hofPanelEl.classList.remove('open');
+}
+
+onEvent((event) => {
+  if (event.type === 'result' && event.vector) {
+    const s = vectorStats.get(event.vector) || {
+      count: 0, breaches: 0, fitnessSum: 0, category: event.category, lastSeen: 0,
+    };
+    s.count++;
+    if (event.status === 'BREACH') s.breaches++;
+    s.fitnessSum += fitnessFor(event);
+    s.lastSeen = event.t || Date.now();
+    if (event.category && !s.category) s.category = event.category;
+    vectorStats.set(event.vector, s);
+    if (hofOpen) renderHof();
+  }
+});
+
+/* ---------- Subscriber: Mutation toasts (CON-335) ----------
+   Shows Gemma's reasoning between generations. Listens for real
+   `gemma_mutation` events from the backend; if a generation_complete
+   fires without one shortly after, synthesizes a templated fallback.
+*/
+const mutationToastsEl = document.getElementById('mutation-toasts');
+const FALLBACK_SUMMARIES = [
+  'Filesystem vectors found partial reach. Mutating deeper paths + adding mount techniques.',
+  'Privilege escalation showing fitness. Cross-pollinating with capability bitmask probes.',
+  'Network egress contained. Pivoting population toward in-cluster lateral movement.',
+  'Convergence detected on top survivors. Pushing extreme mutations of best genome.',
+];
+let lastGemmaEventByGen = new Map();
+
+function showMutationToast({ fromGen, toGen, summary, count, latencyMs }) {
+  const el = document.createElement('div');
+  el.className = 'mutation-toast';
+  const latency = latencyMs != null ? `${latencyMs}ms` : '';
+  el.innerHTML = `
+    <div class="toast-header">
+      <span>GEMMA · Gen ${fromGen} → ${toGen}</span>
+      <span class="latency">${latency}</span>
+    </div>
+    <div class="toast-body">${summary}</div>
+    ${count != null ? `<div class="toast-meta">${count} mutated children spawning</div>` : ''}
+  `;
+  mutationToastsEl.appendChild(el);
+  // Cap at 3 visible to avoid spam
+  while (mutationToastsEl.children.length > 3) {
+    mutationToastsEl.removeChild(mutationToastsEl.firstChild);
+  }
+  // Cleanup after animation completes
+  setTimeout(() => el.remove(), 3200);
+}
+
+onEvent((event) => {
+  if (event.type === 'gemma_mutation') {
+    lastGemmaEventByGen.set(event.generation, true);
+    showMutationToast({
+      fromGen: event.parent_generation ?? (event.generation - 1),
+      toGen: event.generation,
+      summary: event.summary || 'Gemma synthesized new mutations from survivor evidence.',
+      count: event.mutation_count,
+      latencyMs: event.latency_ms,
+    });
+  } else if (event.type === 'generation_complete') {
+    // Fallback: if no gemma_mutation arrives within 800ms, synthesize one
+    const completedGen = event.generation;
+    const nextGen = completedGen + 1;
+    setTimeout(() => {
+      if (lastGemmaEventByGen.has(nextGen)) return; // real event already fired
+      const survivors = event.survivors ?? 0;
+      if (survivors === 0) return; // no mutation if no survivors
+      const summary = FALLBACK_SUMMARIES[completedGen % FALLBACK_SUMMARIES.length];
+      showMutationToast({
+        fromGen: completedGen,
+        toGen: nextGen,
+        summary,
+        count: Math.min(survivors * 2, 15),
+        latencyMs: null,
+      });
+    }, 800);
+  } else if (event.type === 'run_complete') {
+    lastGemmaEventByGen.clear();
+  }
+});
+
 /* ---------- Subscriber: Defender Report drawer (CON-337) ---------- */
 const REMEDIATIONS = {
   fs_symlink:         'AppArmor profile + readOnlyRootFilesystem',
@@ -1104,10 +1390,14 @@ document.getElementById('ctrl-reset').onclick = () => {
   terminalEventCount = 0; terminalBadge.textContent = '0 events';
   generations.clear(); renderGenPillBar();
   runBreaches = []; runStarted = false; closeDefenderDrawer();
+  lastGemmaEventByGen.clear();
+  mutationToastsEl.innerHTML = '';
+  // CON-340: hall of fame is session-scoped; user resets it explicitly via reload
   setMode('reset — idle', 'idle');
   // Also reset the map.
   if (mapReady) mapFrame.contentWindow.postMessage({ openzerg: true, type: 'reset' }, '*');
 };
+document.getElementById('ctrl-hof').onclick = toggleHof;
 document.getElementById('ctrl-screenshot').onclick = async () => {
   // Composite shot of the whole shell. html2canvas isn't available offline;
   // best practical move at hackathon: tell pitcher to use macOS Cmd+Shift+5.
