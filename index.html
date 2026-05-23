@@ -95,16 +95,19 @@
     padding: 8px 16px; background: var(--panel-strong);
     font-size: 11px; min-height: 44px;
   }
+  .defense-strip .brand-lockup {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-right: 14px;
+    padding-right: 14px;
+    border-right: 1px solid var(--border);
+  }
   .defense-strip .brand-mark {
-    width: 28px; height: 28px; flex-shrink: 0;
+    width: 26px; height: 26px; flex-shrink: 0;
     background: transparent url('./zerg.svg') no-repeat center/contain;
   }
   .defense-strip .brand-word {
-    color: var(--ink); font-size: 13px; font-weight: 760;
-    letter-spacing: -0.01em; margin-right: 6px;
-  }
-  .defense-strip .brand-divider {
-    width: 1px; height: 22px; background: var(--border); margin: 0 6px;
+    color: var(--ink); font-size: 15px; font-weight: 720;
+    letter-spacing: -0.025em; line-height: 1;
   }
   .defense-strip .label {
     color: var(--dim); font-size: 11px; letter-spacing: 0.13em;
@@ -1524,9 +1527,10 @@ function renderDefenseStrip() {
     `<span class="layer ${l.on ? 'on' : 'off'}"><span class="mark">${l.on ? '✓' : '✗'}</span>${l.name}</span>`
   ).join('');
   defenseStripEl.innerHTML = `
-    <div class="brand-mark" aria-hidden="true"></div>
-    <span class="brand-word">OpenZerg</span>
-    <div class="brand-divider" aria-hidden="true"></div>
+    <span class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-word">OpenZerg</span>
+    </span>
     <span class="label">DEFENSE:</span>
     <select id="defense-config-select">
       <option value="permissive" ${currentConfig === 'permissive' ? 'selected' : ''}>permissive</option>
