@@ -1,0 +1,101 @@
+// Package spawn — single-pod orchestrator.
+//
+// RunPod is the smallest end-to-end glue that the M2 run-loop will call once
+// per pod: it creates the pod, streams stdout, waits for the pod to reach a
+// terminal phase, parses the final JSON line as the attacker result, and then
+// (always, via defer) deletes the pod. Multi-pod fan-out lives one layer up
+// in the cmd/openzerg run loop.
+//
+// The function intentionally does no fitness scoring; that is evolve's job.
+// It only contracts to either return a parsed map[string]any (the result
+// line) plus the raw line bytes, or an error describing which stage failed.
+package spawn
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/TheApexWu/openzerg/backend/internal/evolve"
+	"github.com/TheApexWu/openzerg/backend/internal/k8s"
+)
+
+// PodResult is the outcome of a single pod run from spawn's perspective.
+// Fitness scoring and evidence interpretation happen in evolve.
+type PodResult struct {
+	// Pod is the final pod object after the terminal Get. Its Status
+	// fields (Phase, ContainerStatuses) describe how the container exited.
+	Pod *corev1.Pod
+	// RawLine is the bytes of the last JSON line emitted on stdout. Empty
+	// when no JSON line was found.
+	RawLine []byte
+	// Result is the decoded final JSON object. Nil when no JSON line was
+	// found; spawn's caller treats that as fitness=0.0.
+	Result map[string]any
+	// ParseError is set when stdout streamed cleanly but no JSON object
+	// could be parsed from it. The pod is still considered "completed";
+	// the caller decides how to score the absence of a result.
+	ParseError error
+}
+
+// RunPod orchestrates one pod lifecycle: create → stream logs → wait for
+// terminal phase → parse → delete. The pod is always deleted, including on
+// any error along the way, so callers do not need their own defer.
+//
+// Context cancellation aborts the wait/stream and triggers cleanup. The
+// returned error reflects the first stage to fail; cleanup errors are
+// silently best-effort because there is no useful recovery path for a
+// stuck-delete during a hackathon demo.
+func RunPod(ctx context.Context, cs kubernetes.Interface, pod *corev1.Pod) (*PodResult, error) {
+	if cs == nil {
+		return nil, fmt.Errorf("spawn.RunPod: nil clientset")
+	}
+	if pod == nil {
+		return nil, fmt.Errorf("spawn.RunPod: nil pod")
+	}
+
+	created, err := k8s.CreatePod(ctx, cs, pod)
+	if err != nil {
+		return nil, fmt.Errorf("spawn.RunPod: create: %w", err)
+	}
+	// Best-effort delete on every exit path. Use a fresh context so a
+	// caller-cancelled ctx does not prevent cleanup.
+	defer func() {
+		_ = k8s.DeletePod(context.Background(), cs, created.Namespace, created.Name)
+	}()
+
+	// Start log streaming concurrently with the wait. If the stream open
+	// fails (pod not yet scheduled, transient API error) we treat it as a
+	// soft failure: keep waiting for terminal phase; parse what we have.
+	stream, streamErr := k8s.StreamLogs(ctx, cs, created.Namespace, created.Name, "")
+	var raw []byte
+	if streamErr == nil {
+		raw, _ = io.ReadAll(stream)
+		_ = stream.Close()
+	}
+
+	final, waitErr := k8s.WaitForCompletion(ctx, cs, created.Namespace, created.Name)
+	if waitErr != nil {
+		return nil, fmt.Errorf("spawn.RunPod: wait: %w", waitErr)
+	}
+
+	res := &PodResult{Pod: final}
+	if len(raw) > 0 {
+		line, obj, perr := evolve.ParseLastJSONLineString(string(raw))
+		if perr == nil {
+			res.RawLine = line
+			res.Result = obj
+		} else if !errors.Is(perr, evolve.ErrNoJSONLine) {
+			res.ParseError = perr
+		} else {
+			res.ParseError = perr
+		}
+	} else {
+		res.ParseError = evolve.ErrNoJSONLine
+	}
+	return res, nil
+}
