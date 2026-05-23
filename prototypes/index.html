@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenZerg Prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap">
 <style>
   :root { color-scheme: dark; --bg:#08090b; --panel:#0d0f12; --border:#25282d; --ink:#f4f4f5; --dim:#9ca3af; --accent:#f4f4f5; --green:#a7f3d0; }
   * { box-sizing: border-box; }
@@ -11,7 +14,7 @@
   main { width:min(980px, 100%); }
   .brand-row { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
   .brand-row .mark { width:64px; height:64px; background:transparent url('../zerg.svg') no-repeat center/contain; flex-shrink:0; }
-  h1 { margin:0; font-size:54px; line-height:0.92; letter-spacing:-0.06em; font-weight:780; }
+  h1 { margin:0; font-size:64px; line-height:0.92; font-family:'Geist',ui-sans-serif,system-ui,sans-serif; font-weight:700; letter-spacing:-0.06em; text-transform:lowercase; }
   p { margin:0; color:var(--dim); line-height:1.55; font-size:15px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1px; margin-top:32px; border:1px solid var(--border); background:var(--border); }
   .card { display:block; text-decoration:none; color:inherit; border:0; background:var(--panel); border-radius:0; padding:22px; min-height:224px; transition:background 140ms cubic-bezier(.23,1,.32,1), color 140ms cubic-bezier(.23,1,.32,1); }

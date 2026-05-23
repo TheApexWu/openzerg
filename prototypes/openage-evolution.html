@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenZerg — OpenAge Evolution Remix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap">
 <style>
   :root {
     --bg:#08090b; --panel:#0d0f12; --panel-2:#111318; --border:#25282d;
@@ -17,7 +20,7 @@
   header,.panel,.gate{background:var(--panel)}
   .top{grid-column:1/-1;padding:16px 18px;display:flex;align-items:center;justify-content:space-between}
   .brand{display:flex;gap:4px;align-items:center}.mark{width:34px;height:34px;background:transparent url('../zerg.svg') no-repeat center/contain}
-  h1{margin:0;font-size:20px;letter-spacing:-.03em;font-weight:760;line-height:1}.sub{margin-top:2px;color:var(--muted);font-size:12px}
+  h1{margin:0;font-size:22px;line-height:1;font-family:'Geist',ui-sans-serif,system-ui,sans-serif;font-weight:700;letter-spacing:-.05em;text-transform:lowercase}.sub{margin-top:2px;color:var(--muted);font-size:12px}
   button{border:1px solid var(--border);background:#111318;color:var(--ink);padding:10px 12px;font:inherit;font-size:12px;cursor:pointer;transition:background 140ms var(--ease-out),border-color 140ms var(--ease-out),transform 100ms var(--ease-out)}
   button:hover{background:#171a20;border-color:#3f444c}button:active{transform:scale(.98)}button.mode-active{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:680}
   .panel{min-height:0;overflow:hidden;display:flex;flex-direction:column}.panel>h2{margin:0;padding:13px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}

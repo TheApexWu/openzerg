@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenZerg — Evolution Gate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap">
 <style>
   :root {
     --bg: #08090b;
@@ -30,7 +33,12 @@
   .topbar { grid-column: 1 / -1; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
   .brand { display: flex; align-items: center; gap: 4px; }
   .mark { width: 34px; height: 34px; background: transparent url('../zerg.svg') no-repeat center/contain; }
-  h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; font-weight: 760; line-height: 1; }
+  h1 {
+    margin: 0; font-size: 22px; line-height: 1;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700; letter-spacing: -0.05em;
+    text-transform: lowercase;
+  }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .actions { display: flex; gap: 8px; align-items: center; }
 

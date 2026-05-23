@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>OpenZerg — Demo Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap">
 <style>
   :root {
     --bg: #08090b;
@@ -106,8 +109,10 @@
     background: transparent url('./zerg.svg') no-repeat center/contain;
   }
   .defense-strip .brand-word {
-    color: var(--ink); font-size: 16px; font-weight: 760;
-    letter-spacing: -0.03em; line-height: 1;
+    color: var(--ink); font-size: 18px;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700; letter-spacing: -0.05em; line-height: 1;
+    text-transform: lowercase;
   }
   .defense-strip .label {
     color: var(--dim); font-size: 11px; letter-spacing: 0.13em;
@@ -1529,7 +1534,7 @@ function renderDefenseStrip() {
   defenseStripEl.innerHTML = `
     <span class="brand-lockup">
       <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-word">OpenZerg</span>
+      <span class="brand-word">OpenZerg</span><!-- text-transform: lowercase renders as "openzerg" -->
     </span>
     <span class="label">DEFENSE:</span>
     <select id="defense-config-select">
