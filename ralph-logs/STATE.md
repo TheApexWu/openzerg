@@ -2,7 +2,7 @@
 
 STATUS: RUNNING
 
-Last updated: 2026-05-23T18:58:00Z (iter 0022)
+Last updated: 2026-05-23T19:10:30Z (iter 0024)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -62,13 +62,24 @@ See `RALPH_README.md` for state machine rules and update format.
          run: ok
     kubectl -n openzerg get pods   -> No resources found (clean)
 
-### M5 — Evolution loop, fitness scoring, mutation, summary
+### M4 — Evolution loop, fitness scoring, mutation, summary
+- status: ACCEPTED
+- accepted_at: 2026-05-23T19:10:30Z
+- summary: full evolution loop wired (seeds -> spawn -> score -> survivors -> mutate -> next gen). PRD-priority fitness scoring; pure-Go mutation with cross-breed/path-vary/technique-swap; optional Gemma 4 LLM mutation gated by 32-call budget; SIGINT writes partial summary; per-run JSON+MD artifacts written to ./out. Live 3-pod 2-gen smoke against juice-shop: BREACH detected gen 1 pod 0 (sqli_login, admin token), short-circuited, summary written, pods cleaned. duration ~103s.
+- verify_evidence: |
+    cd backend && go build ./...                              -> ok
+    cd backend && go vet ./...                                -> ok
+    cd backend && go test ./...                               -> ok (evolve fitness+mutate tests added)
+    ./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 3 --generations 2 --out-dir ./out
+        -> BREACH gen 1 pod 0 sqli_login, outcome=BREACH best_fitness=1.00
+    jq '.outcome == "BREACH" and .best_fitness == 1' out/summary-r1779563300.json -> true
+    kubectl -n openzerg get pods                              -> No resources found
+
+### M5 — Cleanup, docs, demo script
 - status: PENDING
 - summary: (not started)
 
-### M6 — Cleanup, docs, demo script
-- status: PENDING
-- summary: (not started)
+
 
 ---
 
@@ -92,3 +103,4 @@ See `RALPH_README.md` for state machine rules and update format.
 - iter 0019 | 2026-05-23T18:11:45Z | M2 | accepted | live DO smoke green: 3/3 busybox stub pods spawn, emit JSON, parse, and delete; pinned RunAsUser=65532 to clear RunAsNonRoot admission
 - iter 0019 | 2026-05-23T18:18:00Z | M3 | progress | Pi research + scaffolded Dockerfile, entrypoint, SKILL.md, prompts, build script; deviation recorded (Pi uses SKILL.md, not skill.yaml)
 - iter 0022 | 2026-05-23T18:58:00Z | M3 | accepted | pi-attacker live; paid Gemma 4 pinned; 3-pod run BREACH+NOOP+NOOP; entrypoint set -e fixes + single-pass jq extraction; control plane post-completion log re-reads
+- iter 0024 | 2026-05-23T19:10:30Z | M4 | accepted | evolution loop wired: fitness.Score (PRD rules), pure-Go Mutate + cross-breed, optional Gemma 4 LLM mutation w/ 32-call budget, RunStore + summary JSON/MD writers, SIGINT cancellation. Live 3-pod 2-gen smoke -> BREACH gen 1 sqli_login (~103s); artifacts at out/summary-r1779563300.{json,md}; pods cleaned.
