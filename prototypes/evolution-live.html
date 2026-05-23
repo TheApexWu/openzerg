@@ -130,8 +130,19 @@
   .run-score { font-weight: 760; font-variant-numeric: tabular-nums; }
   .run-meta { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
   .source-card.compact { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-  .saved-list { margin-top: 10px; display: grid; gap: 6px; }
-  .saved-agent { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 8px; color: var(--dim); font-size: 11px; }
+
+  .right header { padding: 0 14px; }
+  .right .tabs { display: flex; gap: 0; align-items: center; }
+  .right .tab {
+    background: transparent; color: var(--dim);
+    border: 0; border-bottom: 1px solid transparent;
+    padding: 13px 0; margin-right: 18px;
+    font: inherit; font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase;
+    font-weight: 700; cursor: pointer; transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+  }
+  .right .tab:last-child { margin-right: 0; }
+  .right .tab:hover { color: var(--ink); }
+  .right .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
 
   @media (max-width: 1100px) {
     body { overflow: auto; }
@@ -175,11 +186,6 @@
         <div class="source-head"><span class="source-name">Deployment policy</span><span class="pill">gate</span></div>
         <div class="source-copy">Block automatically if any generation reaches fitness ≥ 0.80. Clear only when the swarm converges below threshold.</div>
       </article>
-      <article class="source-card">
-        <div class="source-head"><span class="source-name">Saved lineages</span><span class="pill">archive</span></div>
-        <div class="source-copy">Best attackers and defenders from each run are preserved for regression and hardening.</div>
-        <div class="saved-list" id="saved-list"></div>
-      </article>
     </div>
   </section>
 
@@ -196,9 +202,17 @@
   </main>
 
   <section class="panel right">
-    <header><span class="eyebrow" id="right-title">Swarm log</span><span class="badge" id="log-badge">0 events</span></header>
+    <header>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-view="log"     role="tab">Swarm log</button>
+        <button class="tab"        data-view="history" role="tab">Run history</button>
+        <button class="tab"        data-view="lineage" role="tab">Saved lineages</button>
+      </div>
+      <span class="badge" id="log-badge">0 events</span>
+    </header>
     <div class="logs" id="logs"></div>
     <div class="history hidden" id="history-panel"></div>
+    <div class="history hidden" id="lineage-panel"></div>
   </section>
 
   <section class="gate">
@@ -216,7 +230,7 @@
   const arena = $('arena');
   const logs = $('logs');
   const historyPanel = $('history-panel');
-  const savedList = $('saved-list');
+  const lineagePanel = $('lineage-panel');
   let viewMode = 'log';
   let eventCount = 0;
   let bestFitness = 0;
@@ -269,8 +283,13 @@
   }
 
   function renderSaved() {
-    const saved = agents.filter(a => a.saved).slice(-5).reverse();
-    savedList.innerHTML = saved.length ? saved.map(a => `<div class="saved-agent"><span>${a.id}</span><b>${a.fitness.toFixed(2)}</b></div>`).join('') : '<div class="source-copy">No saved agents yet.</div>';
+    const saved = agents.filter(a => a.saved).slice(-12).reverse();
+    lineagePanel.innerHTML = saved.length
+      ? saved.map(a => `<article class="run-card" data-agent="${a.id}">
+          <div class="run-top"><span class="run-name">${a.id}</span><span class="run-score">${a.fitness.toFixed(2)}</span></div>
+          <div class="run-meta">preserved for regression + hardening</div>
+        </article>`).join('')
+      : '<div class="source-copy">No saved lineages yet. Run evolution to preserve survivors.</div>';
   }
 
   function renderHistory() {
@@ -282,10 +301,14 @@
 
   function setRightView(mode) {
     viewMode = mode;
-    logs.classList.toggle('hidden', mode === 'history');
-    historyPanel.classList.toggle('hidden', mode !== 'history');
-    $('right-title').textContent = mode === 'history' ? 'Run history' : 'Swarm log';
+    logs.classList.toggle('hidden',           mode !== 'log');
+    historyPanel.classList.toggle('hidden',   mode !== 'history');
+    lineagePanel.classList.toggle('hidden',   mode !== 'lineage');
+    document.querySelectorAll('.right .tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.view === mode);
+    });
     if (mode === 'history') renderHistory();
+    if (mode === 'lineage') renderSaved();
   }
 
   async function refreshData() {
@@ -452,6 +475,9 @@
   $('btn-reset').onclick = reset;
   $('btn-refresh').onclick = refreshData;
   $('btn-history').onclick = () => setRightView(viewMode === 'history' ? 'log' : 'history');
+  document.querySelectorAll('.right .tab').forEach(t => {
+    t.addEventListener('click', () => setRightView(t.dataset.view));
+  });
 
   probeSources();
   setInterval(refreshData, 8000);
