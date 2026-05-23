@@ -168,8 +168,9 @@ build_prompt() {
   cat <<EOF
 You are the OpenZerg ralph loop. This is iteration ${iter}.
 
-Make ONE small forward-progress increment on the OpenZerg project. Do not try
-to finish multiple milestones in one iteration.
+Your target unit of work this iteration is **one full milestone**, falling
+back to a complete task group within a milestone if the milestone is too
+large or you hit an external blocker. Do NOT stop after a single edit.
 
 Read these files in order before doing anything:
 
@@ -181,18 +182,29 @@ Read these files in order before doing anything:
 Then:
 
   - Pick the lowest-numbered milestone in STATE.md that is NOT 'ACCEPTED'.
-  - Within it, pick the smallest next task from PRD.json milestones[].tasks.
-  - Make the smallest possible change that advances that task.
-  - Run that milestone's 'verify' commands. Fix forward if red.
-  - If ALL of the milestone's 'acceptance' items now pass, update STATE.md to
-    mark it 'ACCEPTED' with iso timestamp and a one-line summary.
-  - Commit your changes with a conventional-commit message. No co-author
-    trailer, no "Generated with" line.
-  - If you need human input, append a '- [ ]' line to NEEDS_USER.md and set
-    the current milestone to 'BLOCKED' in STATE.md, then exit.
+  - Plan the task sequence from PRD.json milestones[].tasks for that milestone.
+  - Work through the tasks in order. Run the milestone's 'verify' commands
+    after each meaningful chunk. Fix forward if red — do not move on while
+    anything is broken.
+  - When ALL of the milestone's 'acceptance' items pass, mark it ACCEPTED in
+    STATE.md (iso timestamp + one-line summary) and commit.
+  - If you finished the milestone and have plenty of session budget left
+    (<~40% context used), you MAY begin the next milestone in this same
+    iteration. Only do this if no research / user input is needed.
+  - Commit changes with conventional-commit messages. No co-author trailer,
+    no "Generated with" line. Multiple commits per iteration is fine.
+  - If you need human input, append a '- [ ]' line BELOW the
+    '## Open requests' heading in NEEDS_USER.md, set the current milestone to
+    'BLOCKED' in STATE.md, and exit cleanly.
+  - Follow the 'Code style — readability first' section in RALPH_README.md:
+    verbose function/variable names, minimal comments (only for non-obvious
+    logic or future work), no comment spam.
 
 Hard rules:
 
+  - Do NOT use a free or trial version of Gemma 4. Always use the paid
+    OpenRouter API with the real OPENROUTER_API_KEY. If the key is missing
+    or invalid, request it via NEEDS_USER.md and do not proceed.
   - Do NOT re-verify any milestone whose status is already ACCEPTED, unless
     this iteration changed a file that milestone depends on.
   - Do NOT commit any API key value.
@@ -200,9 +212,10 @@ Hard rules:
   - Do NOT attack any URL other than context.target.url in PRD.json.
   - Do NOT modify PRD.json or RALPH_README.md unless the user told you to.
   - Do NOT write Python. This is a Go project.
+  - Keep tests LIGHT per the testing policy in RALPH_README.md.
 
-Finish by appending exactly one line to the '## Iteration Log' section at the
-bottom of STATE.md, using iter number ${iter}:
+Finish by appending one line per milestone touched to the '## Iteration Log'
+section at the bottom of STATE.md, using iter number ${iter}:
 
   - iter ${iter} | <iso-timestamp> | M<n> | progress|accepted|blocked | <short note>
 

