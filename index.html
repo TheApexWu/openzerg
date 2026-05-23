@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OpenZerg — Demo Console</title>
+<style>
+  :root {
+    --bg: #030712;
+    --panel: #0b1220;
+    --border: #1f2937;
+    --ink: #e5e7eb;
+    --dim: #6b7280;
+    --accent: #38bdf8;
+    --hold: #4ade80;
+    --breach: #ef4444;
+    --warn: #f59e0b;
+    --fs: #f59e0b;
+    --net: #3b82f6;
+    --priv: #a855f7;
+    --res: #ec4899;
+    --sec: #14b8a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100vh; background: var(--bg); color: var(--ink);
+               font-family: 'JetBrains Mono', 'Courier New', monospace; overflow: hidden; }
+
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(420px, 2fr) minmax(320px, 1fr);
+    grid-template-rows: 1fr auto;
+    height: 100vh; width: 100vw; gap: 0;
+  }
+  .panel { position: relative; border: 1px solid var(--border); overflow: hidden;
+           background: var(--bg); }
+  .panel header {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--panel); padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; letter-spacing: 2px; color: var(--accent);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel header .badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+    background: #111827; color: var(--dim);
+  }
+  .panel header .badge.live   { color: var(--hold);   border: 1px solid var(--hold); }
+  .panel header .badge.replay { color: var(--accent); border: 1px solid var(--accent); }
+  .panel header .badge.idle   { color: var(--dim);    border: 1px solid var(--border); }
+  .panel header .badge.error  { color: var(--breach); border: 1px solid var(--breach); }
+
+  /* Left: kubectl pane */
+  .panel-left { grid-column: 1; grid-row: 1; }
+  .pod-table {
+    width: 100%; font-size: 11px; border-collapse: collapse;
+    color: var(--ink);
+  }
+  .pod-table thead th {
+    text-align: left; padding: 8px 12px; color: var(--dim);
+    border-bottom: 1px solid var(--border); position: sticky; top: 38px;
+    background: var(--bg); font-weight: 600; letter-spacing: 1px;
+  }
+  .pod-table tbody td { padding: 6px 12px; border-bottom: 1px solid #0f172a; }
+  .pod-table tbody tr.fresh { animation: fadein 0.4s ease; }
+  @keyframes fadein { from { background: #1e3a8a44; } to { background: transparent; } }
+  .pod-status.Pending   { color: var(--dim); }
+  .pod-status.Running   { color: var(--accent); }
+  .pod-status.Completed { color: var(--hold); }
+  .pod-status.Completed.breach { color: var(--breach); }
+  .pod-meta { padding: 10px 12px; font-size: 10px; color: var(--dim);
+              border-top: 1px solid var(--border); position: absolute; bottom: 0; left: 0; right: 0;
+              background: var(--bg); }
+  .pod-meta b { color: var(--ink); }
+  .generation-banner {
+    padding: 6px 12px; margin: 4px 0;
+    background: #1c0f00; border-left: 3px solid #f97316;
+    color: #f97316; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+  }
+
+  /* Center: map iframe */
+  .panel-center { grid-column: 2; grid-row: 1; padding: 0; border-color: var(--accent); }
+  .panel-center iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
+
+  /* Right: terminal pane */
+  .panel-right { grid-column: 3; grid-row: 1; }
+  .terminal {
+    height: calc(100% - 38px); padding: 8px 12px;
+    font-size: 11px; line-height: 1.45; color: var(--ink);
+    overflow-y: auto; overflow-x: hidden;
+    background: var(--bg);
+  }
+  .terminal .line { white-space: pre-wrap; word-break: break-word; opacity: 0.95; }
+  .terminal .line.log { color: var(--dim); }
+  .terminal .line.result-held   { color: var(--hold); }
+  .terminal .line.result-breach { color: var(--breach); font-weight: 600; }
+  .terminal .line.system { color: var(--accent); font-style: italic; opacity: 0.6; }
+  .terminal .line.generation { color: #f97316; font-weight: 700; letter-spacing: 1px; }
+  .terminal .line.survivor   { color: #facc15; }
+  .terminal::-webkit-scrollbar { width: 6px; }
+  .terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Bottom control strip */
+  .controls {
+    grid-column: 1 / span 3; grid-row: 2;
+    display: flex; gap: 8px; align-items: center;
+    padding: 10px 14px; background: var(--panel); border-top: 1px solid var(--border);
+    font-size: 11px; letter-spacing: 1px;
+  }
+  .controls .group { display: flex; gap: 6px; align-items: center; }
+  .controls .group + .group { margin-left: 14px; padding-left: 14px;
+                              border-left: 1px solid var(--border); }
+  .controls .label { color: var(--dim); }
+  .controls button {
+    background: transparent; color: var(--ink);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 10px; font-family: inherit; font-size: 11px;
+    letter-spacing: 1px; cursor: pointer; transition: all 0.12s;
+  }
+  .controls button:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .controls button.primary  { color: var(--accent); border-color: var(--accent); }
+  .controls button.live     { color: var(--hold); border-color: var(--hold); }
+  .controls button.replay   { color: var(--accent); border-color: var(--accent); }
+  .controls button.active   { background: var(--accent); color: #030712; }
+  .controls .mode-display   { color: var(--ink); font-weight: 600; min-width: 200px; }
+
+  .controls .char-btn {
+    width: 56px; height: 56px; padding: 2px;
+    background: #0f1729; border: 1px solid var(--border);
+    border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+  }
+  .controls .char-btn:hover { transform: translateY(-2px); background: #1a2540; }
+  .controls .char-btn img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+    pointer-events: none; /* clicks bubble to button */
+  }
+
+  .controls button.text-launch-btn { min-width: 56px; font-weight: 600; padding: 8px 12px; }
+  .controls button.text-launch-btn[data-category="filesystem"] { color: #f59e0b; border-color: #f59e0b; }
+  .controls button.text-launch-btn[data-category="network"]    { color: #3b82f6; border-color: #3b82f6; }
+  .controls button.text-launch-btn[data-category="privilege"]  { color: #a855f7; border-color: #a855f7; }
+  .controls button.text-launch-btn[data-category="secrets"]    { color: #14b8a6; border-color: #14b8a6; }
+  .controls button.text-launch-btn[data-category="resource"]   { color: #ec4899; border-color: #ec4899; }
+
+  /* Toggle launch UI flavour based on the SKIN aesthetic */
+  body[data-aesthetic="ra2"]      .launch-tactical { display: none; }
+  body[data-aesthetic="tactical"] .launch-ra2      { display: none; }
+  .controls .char-btn[data-category="filesystem"] { border-color: rgba(245,158,11,0.4); }
+  .controls .char-btn[data-category="network"]    { border-color: rgba(59,130,246,0.4); }
+  .controls .char-btn[data-category="privilege"]  { border-color: rgba(168,85,247,0.4); }
+  .controls .char-btn[data-category="secrets"]    { border-color: rgba(20,184,166,0.4); }
+  .controls .char-btn[data-category="resource"]   { border-color: rgba(236,72,153,0.4); }
+  .controls .char-btn[data-category="filesystem"]:hover { border-color: #f59e0b; box-shadow: 0 0 0 1px #f59e0b; }
+  .controls .char-btn[data-category="network"]:hover    { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+  .controls .char-btn[data-category="privilege"]:hover  { border-color: #a855f7; box-shadow: 0 0 0 1px #a855f7; }
+  .controls .char-btn[data-category="secrets"]:hover    { border-color: #14b8a6; box-shadow: 0 0 0 1px #14b8a6; }
+  .controls .char-btn[data-category="resource"]:hover   { border-color: #ec4899; box-shadow: 0 0 0 1px #ec4899; }
+
+  .controls button.swarm-btn {
+    color: var(--accent); border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .controls button.aesthetic-btn, .controls button.audio-btn { min-width: 64px; }
+  .controls button.aesthetic-btn.active,
+  .controls button.audio-btn.active {
+    background: var(--accent); color: #030712; border-color: var(--accent);
+  }
+  .controls button.audio-btn:not(.active) { color: var(--dim); }
+
+  .controls .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Left: kubectl-style live pod view -->
+  <section class="panel panel-left" id="kubectl-pane">
+    <header>
+      <span>LIVE PODS — kubectl get pods -w</span>
+      <span class="badge idle" id="kubectl-badge">idle</span>
+    </header>
+    <table class="pod-table">
+      <thead><tr><th>NAME</th><th>STATUS</th><th>NODE</th></tr></thead>
+      <tbody id="pod-rows"></tbody>
+    </table>
+    <div class="generation-banner" id="gen-banner" style="display:none"></div>
+    <div class="pod-meta">
+      Cluster: <b>kind-openzerg</b> · Namespace: <b>default</b><br>
+      Total: <b id="pod-total">0</b> · Running: <b id="pod-running">0</b> · Completed: <b id="pod-completed">0</b> · Gen: <b id="pod-gen">—</b>
+    </div>
+  </section>
+
+  <!-- Center: containment map (Phaser scene loaded as iframe, driven via postMessage) -->
+  <section class="panel panel-center">
+    <iframe id="map-frame" src="./openzerg-map.html" title="OpenZerg containment map"></iframe>
+  </section>
+
+  <!-- Right: raw exploit stdout -->
+  <section class="panel panel-right" id="terminal-pane">
+    <header>
+      <span>ATTACK LOGS — stdout</span>
+      <span class="badge idle" id="terminal-badge">0 events</span>
+    </header>
+    <div class="terminal" id="terminal-stream"></div>
+  </section>
+
+  <!-- Bottom: master controls -->
+  <div class="controls">
+    <div class="group">
+      <span class="label">MODE:</span>
+      <span class="mode-display" id="mode-display">booting…</span>
+    </div>
+    <div class="group">
+      <button class="live"    id="ctrl-live">LIVE</button>
+      <button class="replay"  id="ctrl-replay">REPLAY</button>
+      <button class="primary" id="ctrl-auto">AUTO</button>
+    </div>
+    <div class="group">
+      <button id="ctrl-play-replay">▶ PLAY REPLAY</button>
+      <button id="ctrl-reset">⟲ RESET</button>
+    </div>
+    <div class="group launch-ra2">
+      <span class="label">LAUNCH:</span>
+      <button class="char-btn" data-category="filesystem" data-sprite="atk_filesystem" title="Engineer — filesystem">
+        <img src="./assets/ra-2-sprites/engineer_thumb.png" alt="Engineer">
+      </button>
+      <button class="char-btn" data-category="network" data-sprite="atk_network" title="Spy — network">
+        <img src="./assets/ra-2-sprites/spy_thumb.png" alt="Spy">
+      </button>
+      <button class="char-btn" data-category="privilege" data-sprite="atk_privilege" title="Tanya — privilege escalation">
+        <img src="./assets/ra-2-sprites/tanya_thumb.png" alt="Tanya">
+      </button>
+      <button class="char-btn" data-category="secrets" data-sprite="atk_secrets" title="Psi Comando — secrets">
+        <img src="./assets/ra-2-sprites/psi_comando_thumb.png" alt="Psi Comando">
+      </button>
+      <button class="char-btn" data-category="resource" data-sprite="atk_resource" title="Terror Drone — resource exhaustion">
+        <img src="./assets/ra-2-sprites/terror_drone_thumb.png" alt="Terror Drone">
+      </button>
+      <button class="char-btn" data-category="resource" data-sprite="atk_conscript" title="Conscript — resource pressure">
+        <img src="./assets/ra-2-sprites/conscript_thumb.png" alt="Conscript">
+      </button>
+      <button class="char-btn" data-category="privilege" data-sprite="atk_gi" title="GI — privilege probe">
+        <img src="./assets/ra-2-sprites/gi_thumb.png" alt="GI">
+      </button>
+      <button class="swarm-btn" id="ctrl-swarm-ra2">⚡ SWARM x20</button>
+    </div>
+    <div class="group launch-tactical">
+      <span class="label">LAUNCH:</span>
+      <button class="text-launch-btn" data-category="filesystem">FS</button>
+      <button class="text-launch-btn" data-category="network">NET</button>
+      <button class="text-launch-btn" data-category="privilege">PRIV</button>
+      <button class="text-launch-btn" data-category="secrets">SEC</button>
+      <button class="text-launch-btn" data-category="resource">RES</button>
+      <button class="swarm-btn" id="ctrl-swarm-tactical">⚡ SWARM x20</button>
+    </div>
+    <div class="group">
+      <span class="label">SKIN:</span>
+      <button class="aesthetic-btn" data-aesthetic="ra2">RA2</button>
+      <button class="aesthetic-btn" data-aesthetic="tactical">TACTICAL</button>
+    </div>
+    <div class="group">
+      <span class="label">AUDIO:</span>
+      <button class="audio-btn" id="ctrl-music">MUSIC</button>
+      <button class="audio-btn" id="ctrl-sfx">SFX</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="group">
+      <button id="ctrl-screenshot">📸 SCREENSHOT</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   OpenZerg Demo Shell
+   - Single event pipeline: LiveSource | ReplaySource
+     → normalizeEvent() → pacingQueue → eventBus
+   - Three subscribers: map iframe (postMessage), kubectl pane,
+     terminal pane.
+   - URL params: ?mode=live|replay|auto  ?ws=...  ?replay=...
+   ============================================================ */
+
+const params = new URLSearchParams(location.search);
+const MODE      = params.get('mode')   || 'auto';
+const WS_URL    = params.get('ws')     || 'ws://localhost:8000/ws';
+const REPLAY_PATH = params.get('replay') || './replay.json';
+
+const CATEGORIES = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
+
+/* ---------- Event bus ---------- */
+const BUS_EVENT = 'openzerg:event';
+function emitEvent(e) { window.dispatchEvent(new CustomEvent(BUS_EVENT, { detail: e })); }
+function onEvent(fn)  { window.addEventListener(BUS_EVENT, (ev) => fn(ev.detail)); }
+
+/* ---------- Normalizer ----------
+   Loose on input, strict on output. Returns null for events we can't
+   make sense of (and warns) rather than throwing. */
+function normalizeEvent(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = { ...raw };
+
+  // Pass-through event types that don't need further normalization
+  const PASSTHROUGH = ['generation_start', 'generation_complete', 'run_started', 'run_complete'];
+  if (PASSTHROUGH.includes(out.type)) return out;
+
+  // Infer type if missing. Legacy payloads with `status` are results.
+  if (!out.type) {
+    if (out.status) out.type = 'result';
+    else if (out.line) out.type = 'log';
+    else { console.warn('[OpenZerg] event missing type', raw); return null; }
+  }
+
+  // Canonicalize category for events that carry one.
+  if (out.category) {
+    const c = String(out.category).toLowerCase();
+    if (!CATEGORIES.includes(c)) {
+      console.warn('[OpenZerg] unknown category', out.category, '— dropping');
+      return null;
+    }
+    out.category = c;
+  }
+
+  // Canonicalize status for result events.
+  if (out.type === 'result') {
+    const s = String(out.status || '').toUpperCase();
+    if (s === 'BREACH' || s === 'BREACHED') out.status = 'BREACH';
+    else if (s === 'HELD' || s === 'HOLD' || s === 'PASS' || s === 'OK') out.status = 'HELD';
+    else { console.warn('[OpenZerg] unknown status', out.status); out.status = 'HELD'; }
+  }
+
+  // Synthesize a pod name if missing — every event must correlate.
+  if (!out.pod) {
+    const cat = out.category || 'unk';
+    out.pod = `attacker-${cat.slice(0, 3)}-${Math.floor(Math.random() * 99).toString().padStart(2, '0')}`;
+  }
+  if (!out.t) out.t = Date.now();
+
+  return out;
+}
+
+/* ---------- Pacing queue ----------
+   started + result are paced (drive visual map + kubectl rows). log events
+   bypass — reading scrolling text doesn't need dramatic timing. */
+const PaceQueue = {
+  buf: [], timer: null,
+  minMs: 300, maxMs: 700, catchUpMs: 200, catchUpThresh: 15,
+
+  push(canonical) {
+    if (!canonical) return;
+    if (canonical.type === 'log') { emitEvent(canonical); return; }
+    this.buf.push(canonical);
+    if (!this.timer) this.drain();
+  },
+
+  drain() {
+    if (this.buf.length === 0) { this.timer = null; return; }
+    emitEvent(this.buf.shift());
+    const ms = (this.buf.length > this.catchUpThresh)
+      ? this.catchUpMs
+      : (this.minMs + Math.random() * (this.maxMs - this.minMs));
+    this.timer = setTimeout(() => this.drain(), ms);
+  },
+
+  clear() {
+    this.buf = [];
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+  },
+};
+
+/* ---------- Sources ---------- */
+let liveSocket = null;
+let replayTimers = [];
+
+function startLiveSource(url) {
+  stopLiveSource();
+  setMode('live (connecting…)', 'idle');
+  try {
+    liveSocket = new WebSocket(url);
+  } catch (e) {
+    setMode('live (failed)', 'error');
+    return false;
+  }
+  liveSocket.onopen    = () => setMode('LIVE — ' + url, 'live');
+  liveSocket.onclose   = () => setMode('live (disconnected)', 'idle');
+  liveSocket.onerror   = () => setMode('live (error)', 'error');
+  liveSocket.onmessage = (ev) => {
+    try { PaceQueue.push(normalizeEvent(JSON.parse(ev.data))); }
+    catch (err) { console.error('[OpenZerg] parse', err); }
+  };
+  return true;
+}
+function stopLiveSource() {
+  if (liveSocket) { try { liveSocket.close(); } catch {} liveSocket = null; }
+}
+
+async function startReplaySource(path) {
+  stopReplaySource();
+  setMode('replay (loading…)', 'idle');
+  let data;
+  try { data = await fetch(path).then(r => r.json()); }
+  catch (e) { setMode('replay (load failed)', 'error'); console.error(e); return; }
+  if (!Array.isArray(data)) { setMode('replay (bad data)', 'error'); return; }
+  setMode('REPLAY — ' + path, 'replay');
+  appendLine('system', `▶ replay started: ${data.length} events`);
+  const t0 = performance.now();
+  data.forEach((e) => {
+    const delay = Math.max(0, e.t || 0);
+    replayTimers.push(setTimeout(() => PaceQueue.push(normalizeEvent(e)), delay));
+  });
+  // Heartbeat when finished
+  const lastT = data.reduce((m, e) => Math.max(m, e.t || 0), 0);
+  replayTimers.push(setTimeout(() => appendLine('system', '▶ replay complete'), lastT + 500));
+}
+function stopReplaySource() {
+  replayTimers.forEach(t => clearTimeout(t));
+  replayTimers = [];
+}
+
+function bootMode() {
+  if (MODE === 'live')   { startLiveSource(WS_URL); return; }
+  if (MODE === 'replay') { startReplaySource(REPLAY_PATH); return; }
+  // auto: try live with 1.5s probe, fall back to replay
+  setMode('auto (probing live…)', 'idle');
+  let resolved = false;
+  let probe;
+  try { probe = new WebSocket(WS_URL); }
+  catch { startReplaySource(REPLAY_PATH); return; }
+  const fallback = setTimeout(() => {
+    if (resolved) return;
+    resolved = true;
+    try { probe.close(); } catch {}
+    appendLine('system', `auto: live unreachable, falling back to replay`);
+    startReplaySource(REPLAY_PATH);
+  }, 1500);
+  probe.onopen = () => {
+    if (resolved) return;
+    resolved = true;
+    clearTimeout(fallback);
+    liveSocket = probe;
+    liveSocket.onmessage = (ev) => {
+      try { PaceQueue.push(normalizeEvent(JSON.parse(ev.data))); }
+      catch (err) { console.error('[OpenZerg] parse', err); }
+    };
+    liveSocket.onclose = () => setMode('live (disconnected)', 'idle');
+    liveSocket.onerror = () => setMode('live (error)', 'error');
+    setMode('AUTO → LIVE — ' + WS_URL, 'live');
+  };
+  probe.onerror = () => {
+    if (resolved) return;
+    resolved = true;
+    clearTimeout(fallback);
+    appendLine('system', 'auto: live errored, falling back to replay');
+    startReplaySource(REPLAY_PATH);
+  };
+}
+
+/* ---------- Mode display ---------- */
+function setMode(text, badgeClass) {
+  document.getElementById('mode-display').textContent = text;
+  const badges = ['kubectl-badge', 'terminal-badge'];
+  // Kubectl + terminal badges follow the source state.
+  document.getElementById('kubectl-badge').className = 'badge ' + (badgeClass || 'idle');
+  if (badgeClass === 'live')        document.getElementById('kubectl-badge').textContent = 'live';
+  else if (badgeClass === 'replay') document.getElementById('kubectl-badge').textContent = 'replay';
+  else if (badgeClass === 'error')  document.getElementById('kubectl-badge').textContent = 'error';
+  else                              document.getElementById('kubectl-badge').textContent = 'idle';
+}
+
+/* ---------- Subscriber: map iframe ---------- */
+const mapFrame = document.getElementById('map-frame');
+let mapReady = false;
+const mapQueue = [];
+
+function postToMap(payload) {
+  if (mapReady && mapFrame.contentWindow) mapFrame.contentWindow.postMessage(payload, '*');
+}
+
+window.addEventListener('message', (ev) => {
+  if (ev.data && ev.data.openzerg && ev.data.type === 'ready') {
+    mapReady = true;
+    // Push current aesthetic + audio prefs so the map's initial state agrees with the shell UI.
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'aesthetic', mode: currentAesthetic }, '*');
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'music', enabled: currentMusic }, '*');
+    mapFrame.contentWindow.postMessage({ openzerg: true, type: 'sfx',   enabled: currentSfx   }, '*');
+    while (mapQueue.length) mapFrame.contentWindow.postMessage(mapQueue.shift(), '*');
+  }
+});
+
+onEvent((event) => {
+  // Map handles 'result' for impacts; we forward everything and let map filter.
+  const msg = { openzerg: true, event };
+  if (!mapReady) mapQueue.push(msg);
+  else mapFrame.contentWindow.postMessage(msg, '*');
+});
+
+/* ---------- Aesthetic + audio toggle UI ---------- */
+let currentAesthetic = localStorage.getItem('openzerg-aesthetic') || 'ra2';
+let currentMusic     = localStorage.getItem('openzerg-music') !== '0';
+let currentSfx       = localStorage.getItem('openzerg-sfx')   !== '0';
+
+function syncAestheticUI() {
+  document.querySelectorAll('.aesthetic-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.aesthetic === currentAesthetic);
+  });
+  document.body.dataset.aesthetic = currentAesthetic;
+}
+function syncAudioUI() {
+  document.getElementById('ctrl-music').classList.toggle('active', currentMusic);
+  document.getElementById('ctrl-sfx').classList.toggle('active', currentSfx);
+}
+
+function setAesthetic(mode) {
+  if (mode !== 'ra2' && mode !== 'tactical') return;
+  currentAesthetic = mode;
+  localStorage.setItem('openzerg-aesthetic', mode);
+  document.body.dataset.aesthetic = mode; // drives launch-ra2 / launch-tactical CSS toggle
+  syncAestheticUI();
+  postToMap({ openzerg: true, type: 'aesthetic', mode });
+  appendLine('system', `aesthetic → ${mode.toUpperCase()}`);
+}
+function setMusic(enabled) {
+  currentMusic = !!enabled;
+  localStorage.setItem('openzerg-music', currentMusic ? '1' : '0');
+  syncAudioUI();
+  postToMap({ openzerg: true, type: 'music', enabled: currentMusic });
+  appendLine('system', `music ${currentMusic ? 'ON' : 'OFF'}`);
+}
+function setSfx(enabled) {
+  currentSfx = !!enabled;
+  localStorage.setItem('openzerg-sfx', currentSfx ? '1' : '0');
+  syncAudioUI();
+  postToMap({ openzerg: true, type: 'sfx', enabled: currentSfx });
+  appendLine('system', `sfx ${currentSfx ? 'ON' : 'OFF'}`);
+}
+
+document.querySelectorAll('.aesthetic-btn').forEach(btn => {
+  btn.onclick = () => setAesthetic(btn.dataset.aesthetic);
+});
+document.getElementById('ctrl-music').onclick = () => setMusic(!currentMusic);
+document.getElementById('ctrl-sfx').onclick   = () => setSfx(!currentSfx);
+
+// Launch buttons — both the RA2 character thumbnails and the TACTICAL text
+// buttons hit the same shell pipeline via OpenZergShell.ping(). System line
+// confirms the click was received (helps when buttons feel unresponsive).
+function launchAttack(category, sprite) {
+  appendLine('system', `launch → ${category}${sprite ? ` / ${sprite.replace(/^atk_/, '')}` : ''}`);
+  if (!window.OpenZergShell) {
+    console.error('[OpenZerg] shell API not ready');
+    return;
+  }
+  window.OpenZergShell.ping(category, undefined, { sprite });
+}
+document.querySelectorAll('.char-btn, .text-launch-btn').forEach(btn => {
+  btn.onclick = () => launchAttack(btn.dataset.category, btn.dataset.sprite);
+});
+function fireSwarm() {
+  const cats = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => launchAttack(cats[i % cats.length]), i * 80);
+  }
+  appendLine('system', '⚡ swarm x20 launched');
+}
+document.getElementById('ctrl-swarm-ra2').onclick      = fireSwarm;
+document.getElementById('ctrl-swarm-tactical').onclick = fireSwarm;
+
+// Forward any click in the shell to the iframe as a user-gesture signal so
+// the iframe's Web Audio context can unlock for music + voice playback
+// (autoplay policy blocks audio that originates from cross-document
+// postMessage without a same-document user gesture).
+document.addEventListener('click', () => {
+  postToMap({ openzerg: true, type: 'audioGesture' });
+});
+
+syncAestheticUI(); syncAudioUI();
+
+/* ---------- Subscriber: terminal pane ---------- */
+const terminalEl = document.getElementById('terminal-stream');
+const terminalBadge = document.getElementById('terminal-badge');
+let terminalEventCount = 0;
+
+onEvent((event) => {
+  const podShort = (event.pod || '?').replace(/^attacker-/, '');
+  if (event.type === 'log') {
+    appendLine('log', `[${podShort}] ${event.line || ''}`);
+  } else if (event.type === 'result') {
+    const verdict = event.status === 'BREACH' ? 'BREACH' : 'HELD';
+    const cls = event.status === 'BREACH' ? 'result-breach' : 'result-held';
+    const ev = event.evidence ? ` — ${event.evidence}` : '';
+    appendLine(cls, `[${podShort}] RESULT: ${verdict}${ev}`);
+  } else if (event.type === 'started') {
+    appendLine('log', `[${podShort}] launching ${event.vector || ''}${event.generation ? ` (gen ${event.generation})` : ''}`);
+  } else if (event.type === 'generation_start') {
+    appendLine('generation', `━━ GENERATION ${event.generation} — ${event.population} probes deploying ━━`);
+  } else if (event.type === 'generation_complete') {
+    const s = event.survivors || 0;
+    appendLine('survivor', `━━ GEN ${event.generation} COMPLETE — ${s} survivors → mutating next wave ━━`);
+  } else if (event.type === 'run_complete') {
+    const b = event.breaches || 0;
+    const cls = b > 0 ? 'result-breach' : 'result-held';
+    appendLine(cls, `━━ RUN COMPLETE — ${event.generations} generations, ${b} breaches, ${event.total} probes ━━`);
+  }
+  terminalEventCount++;
+  terminalBadge.textContent = `${terminalEventCount} events`;
+});
+
+function appendLine(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.textContent = text;
+  terminalEl.appendChild(div);
+  while (terminalEl.children.length > 250) terminalEl.removeChild(terminalEl.firstChild);
+  terminalEl.scrollTop = terminalEl.scrollHeight;
+}
+
+/* ---------- Subscriber: kubectl pane ---------- */
+const podRowsEl    = document.getElementById('pod-rows');
+const podTotalEl   = document.getElementById('pod-total');
+const podRunningEl = document.getElementById('pod-running');
+const podCompletedEl = document.getElementById('pod-completed');
+const podGenEl     = document.getElementById('pod-gen');
+const genBannerEl  = document.getElementById('gen-banner');
+const podState     = new Map(); // pod -> { status, node, verdict?, order }
+let podOrder = 0;
+
+onEvent((event) => {
+  if (event.type === 'generation_start') {
+    genBannerEl.style.display = 'block';
+    genBannerEl.textContent = `⚡ GENERATION ${event.generation} — ${event.population} PROBES`;
+    podGenEl.textContent = event.generation;
+  } else if (event.type === 'generation_complete') {
+    genBannerEl.textContent = `✓ GEN ${event.generation} — ${event.survivors} SURVIVORS → MUTATING`;
+  }
+});
+
+function strHash(s) {
+  let h = 0; for (const c of s) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+}
+
+onEvent((event) => {
+  if (event.type === 'started') {
+    if (!podState.has(event.pod)) {
+      podState.set(event.pod, {
+        status: 'Pending', node: '<none>', order: podOrder++,
+        category: event.category, vector: event.vector,
+      });
+      renderPods(event.pod);
+      // Real K8s shows Pending → Running latency. Fake it convincingly.
+      setTimeout(() => {
+        const p = podState.get(event.pod);
+        if (p && p.status === 'Pending') {
+          p.status = 'Running';
+          p.node = `node-${1 + (strHash(event.pod) % 3)}`;
+          renderPods(event.pod);
+        }
+      }, 250 + Math.random() * 700);
+    }
+  } else if (event.type === 'result') {
+    if (!podState.has(event.pod)) {
+      podState.set(event.pod, {
+        status: 'Running', node: `node-${1 + (strHash(event.pod) % 3)}`,
+        order: podOrder++, category: event.category, vector: event.vector,
+      });
+    }
+    const p = podState.get(event.pod);
+    p.status = 'Completed';
+    p.verdict = event.status;
+    renderPods(event.pod);
+  }
+});
+
+function renderPods(freshPod) {
+  const rows = [...podState.entries()].sort((a, b) => a[1].order - b[1].order);
+  // Show last 14 pods so the table stays readable
+  const visible = rows.slice(-14);
+  podRowsEl.innerHTML = visible.map(([name, p]) => {
+    const isFresh = name === freshPod ? 'fresh' : '';
+    const breachCls = (p.status === 'Completed' && p.verdict === 'BREACH') ? 'breach' : '';
+    return `<tr class="${isFresh}">
+      <td>${name}</td>
+      <td class="pod-status ${p.status} ${breachCls}">${p.status}</td>
+      <td>${p.node}</td>
+    </tr>`;
+  }).join('');
+  // Stats
+  let running = 0, completed = 0;
+  for (const [, p] of rows) {
+    if (p.status === 'Running') running++;
+    else if (p.status === 'Completed') completed++;
+  }
+  podTotalEl.textContent = rows.length;
+  podRunningEl.textContent = running;
+  podCompletedEl.textContent = completed;
+}
+
+/* ---------- Bottom control wiring ---------- */
+document.getElementById('ctrl-live').onclick = () => startLiveSource(WS_URL);
+document.getElementById('ctrl-replay').onclick = () => startReplaySource(REPLAY_PATH);
+document.getElementById('ctrl-auto').onclick = () => bootMode();
+document.getElementById('ctrl-play-replay').onclick = () => startReplaySource(REPLAY_PATH);
+document.getElementById('ctrl-reset').onclick = () => {
+  stopLiveSource(); stopReplaySource(); PaceQueue.clear();
+  podState.clear(); podRowsEl.innerHTML = '';
+  podTotalEl.textContent = podRunningEl.textContent = podCompletedEl.textContent = '0';
+  terminalEl.innerHTML = '';
+  terminalEventCount = 0; terminalBadge.textContent = '0 events';
+  setMode('reset — idle', 'idle');
+  // Also reset the map.
+  if (mapReady) mapFrame.contentWindow.postMessage({ openzerg: true, type: 'reset' }, '*');
+};
+document.getElementById('ctrl-screenshot').onclick = async () => {
+  // Composite shot of the whole shell. html2canvas isn't available offline;
+  // best practical move at hackathon: tell pitcher to use macOS Cmd+Shift+5.
+  // Until proper screenshot is wired in Phase 1.7, just flash the UI.
+  document.body.style.outline = '4px solid var(--accent)';
+  setTimeout(() => { document.body.style.outline = ''; }, 200);
+  appendLine('system', '📸 use ⌘⇧5 to capture this frame (proper export in 1.7)');
+};
+
+/* ---------- Console test API ---------- */
+window.OpenZergShell = {
+  emit:   (raw) => PaceQueue.push(normalizeEvent(raw)),
+  pace:   PaceQueue,
+  bus:    { emit: emitEvent, on: onEvent },
+  reset:  () => document.getElementById('ctrl-reset').click(),
+  ping: (category, status, opts = {}) => {
+    const pod = `attacker-${category.slice(0, 3)}-${Math.floor(Math.random() * 99).toString().padStart(2, '0')}`;
+    PaceQueue.push(normalizeEvent({ type: 'started', pod, category, vector: 'manual', sprite: opts.sprite }));
+    setTimeout(() => PaceQueue.push(normalizeEvent({
+      type: 'result', pod, category, vector: 'manual', sprite: opts.sprite,
+      status: status || (Math.random() < 0.35 ? 'BREACH' : 'HELD'),
+      evidence: 'manual ping', duration_ms: Math.floor(200 + Math.random() * 1500),
+    })), 600);
+  },
+};
+
+/* ---------- Boot ---------- */
+bootMode();
+
+</script>
+</body>
+</html>
