@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenZerg — Evolution Gate</title>
+<style>
+  :root {
+    --bg: #08090b;
+    --panel: #0d0f12;
+    --panel-strong: #111318;
+    --border: #25282d;
+    --ink: #f4f4f5;
+    --muted: #71717a;
+    --dim: #a1a1aa;
+    --green: #86efac;
+    --yellow: #fde68a;
+    --orange: #fdba74;
+    --red: #fca5a5;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
+
+  .app { height: 100vh; padding: 16px; display: grid; gap: 1px; grid-template-columns: 300px minmax(460px, 1fr) 360px; grid-template-rows: auto 1fr auto; background: var(--border); }
+  .topbar, .panel, .gate { background: var(--panel); }
+  .topbar { grid-column: 1 / -1; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 28px; height: 28px; background: var(--ink); }
+  h1 { margin: 0; font-size: 16px; letter-spacing: -0.02em; font-weight: 680; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .actions { display: flex; gap: 8px; align-items: center; }
+
+  button { border: 1px solid var(--border); background: #111318; color: var(--ink); padding: 10px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 100ms var(--ease-out); }
+  button:hover { border-color: #3f444c; background: #171a20; }
+  button:active { transform: scale(0.98); }
+  button.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 680; }
+
+  .panel { overflow: hidden; min-height: 0; }
+  .panel header { padding: 13px 14px; border-bottom: 1px solid var(--border); background: var(--panel-strong); display: flex; align-items: center; justify-content: space-between; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+  .badge, .pill { font-size: 11px; color: var(--dim); border: 1px solid var(--border); padding: 4px 8px; background: transparent; }
+  .pill { font-size: 10px; padding: 3px 7px; }
+  .pill.live { color: var(--green); }
+  .pill.demo { color: var(--yellow); }
+
+  .left { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; }
+  .center { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; }
+  .right { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; }
+  .gate { grid-column: 1 / -1; grid-row: 3; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+
+  .sources { padding: 12px; display: grid; gap: 10px; }
+  .source-card { border: 1px solid var(--border); background: #101216; padding: 12px; }
+  .source-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .source-name { font-weight: 680; font-size: 13px; }
+  .source-copy { color: var(--dim); font-size: 12px; line-height: 1.45; }
+  .metric { margin-top: 10px; display: flex; justify-content: space-between; color: var(--dim); font-size: 12px; }
+  .metric b { color: var(--ink); }
+
+  .generation-banner { margin: 14px; border: 1px solid var(--border); background: #101216; padding: 14px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+  .gen-num { width: 54px; height: 54px; display: grid; place-items: center; background: #171a20; color: var(--ink); font-weight: 760; font-size: 24px; }
+  .gen-title { font-size: 20px; font-weight: 680; letter-spacing: -0.04em; }
+  .gen-sub { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .best { text-align: right; }
+  .best .score { font-size: 28px; font-weight: 760; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .best .label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
+
+  .arena { position: relative; flex: 1; margin: 0 14px 14px; border: 1px solid var(--border); background: #090a0c; overflow: hidden; }
+  .core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 162px; height: 162px; display: grid; place-items: center; border: 1px solid #3f444c; background: #101216; }
+  .core::before { content: ""; position: absolute; inset: -16px; border: 1px dashed var(--border); }
+  .core-label { text-align: center; font-size: 11px; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; }
+  .core-label b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 5px; letter-spacing: 0; }
+  .probe { position: absolute; width: 12px; height: 12px; transform: translate(-50%, -50%); background: var(--green); transition: left 700ms var(--ease-in-out), top 700ms var(--ease-in-out), opacity 240ms var(--ease-out), transform 700ms var(--ease-in-out); }
+  .probe::after { content: attr(data-score); position: absolute; left: 15px; top: -8px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .probe.hit { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  .scar { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); border: 1px solid currentColor; background: currentColor; opacity: 0.55; }
+
+  .timeline { padding: 0 12px 12px; overflow: auto; display: grid; gap: 8px; }
+  .pod-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--border); background: #101216; animation: rowIn 180ms var(--ease-out); }
+  @keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .pod-name { font-size: 12px; font-weight: 680; }
+  .pod-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .fitness { font-size: 18px; font-weight: 760; font-variant-numeric: tabular-nums; }
+
+  .logs { padding: 12px; overflow: auto; flex: 1; background: #090a0c; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.55; }
+  .line { color: var(--dim); white-space: pre-wrap; }
+  .line strong { color: var(--ink); }
+  .line.good { color: var(--green); }
+  .line.warn { color: var(--yellow); }
+  .line.hot { color: var(--orange); }
+  .line.bad { color: var(--red); }
+  .line.source { color: #d4d4d8; }
+
+  .gate-title { font-weight: 680; letter-spacing: -0.02em; }
+  .gate-copy { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .gate-status { padding: 10px 14px; font-weight: 760; letter-spacing: 0.08em; font-size: 12px; border: 1px solid var(--border); color: var(--dim); }
+  .gate-status.blocked { color: var(--red); border-color: #7f1d1d; background: #1c0d0d; }
+  .gate-status.cleared { color: var(--green); border-color: #14532d; background: #07140d; }
+
+  @media (max-width: 1100px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100vh; grid-template-columns: 1fr; grid-template-rows: auto auto 520px auto auto; }
+    .topbar, .left, .center, .right, .gate { grid-column: 1; grid-row: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1>OpenZerg Evolution Gate</h1>
+        <div class="subtitle">Autonomous red-team generations for AI sandbox deploys</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btn-reset">Reset</button>
+      <button id="btn-hardened">Run hardened config</button>
+      <button id="btn-run" class="primary">Run evolution</button>
+    </div>
+  </header>
+
+  <section class="panel left">
+    <header><span class="eyebrow">Data sources</span><span class="badge" id="source-badge">probing</span></header>
+    <div class="sources">
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">ClickHouse</span><span class="pill demo" id="ch-status">demo</span></div>
+        <div class="source-copy">Probe telemetry, fitness history, and generation aggregates. Auth should run server-side via local proxy or ClickHouse Cloud credentials.</div>
+        <div class="metric"><span>events written</span><b id="ch-events">0</b></div>
+        <div class="metric"><span>best fitness</span><b id="ch-best">0.00</b></div>
+      </article>
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">Nimble</span><span class="pill demo" id="nimble-status">demo</span></div>
+        <div class="source-copy">Live web/CVE intelligence seeds Generation 1 genomes, then survivors mutate around the most promising weaknesses.</div>
+        <div class="metric"><span>CVE seeds</span><b id="nimble-seeds">0</b></div>
+        <div class="metric"><span>freshness</span><b id="nimble-fresh">demo</b></div>
+      </article>
+      <article class="source-card">
+        <div class="source-head"><span class="source-name">Deployment policy</span><span class="pill">gate</span></div>
+        <div class="source-copy">Block automatically if any generation reaches fitness ≥ 0.80. Clear only when the swarm converges below threshold.</div>
+      </article>
+    </div>
+  </section>
+
+  <main class="panel center">
+    <header><span class="eyebrow">Evolution loop</span><span class="badge" id="loop-badge">idle</span></header>
+    <div class="generation-banner">
+      <div class="gen-num" id="gen-num">—</div>
+      <div><div class="gen-title" id="gen-title">Waiting for container spin-up</div><div class="gen-sub" id="gen-sub">The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.</div></div>
+      <div class="best"><div class="score" id="best-score">0.00</div><div class="label">best fitness</div></div>
+    </div>
+    <div class="arena" id="arena">
+      <div class="core"><div class="core-label"><b>AI Sandbox</b><span id="core-state">deployment pending</span></div></div>
+    </div>
+  </main>
+
+  <section class="panel right">
+    <header><span class="eyebrow">Swarm log</span><span class="badge" id="log-badge">0 events</span></header>
+    <div class="logs" id="logs"></div>
+  </section>
+
+  <section class="gate">
+    <div>
+      <div class="gate-title" id="gate-title">Deployment gate armed</div>
+      <div class="gate-copy" id="gate-copy">No human approves the deployment. The swarm decides from fitness evidence.</div>
+    </div>
+    <div class="gate-status" id="gate-status">PENDING</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const arena = $('arena');
+  const logs = $('logs');
+  let eventCount = 0;
+  let bestFitness = 0;
+  let chEvents = 0;
+  let hardened = false;
+  let timers = [];
+
+  const seeds = [
+    'CVE-2026-1182 containerd mount propagation',
+    'CVE-2026-2041 kubelet unauthenticated metrics',
+    'CVE-2026-3109 service-account token over-scope',
+  ];
+
+  const categories = ['filesystem', 'network', 'privilege', 'secrets', 'resource'];
+  const vectors = {
+    filesystem: ['proc-root traversal', 'hostPath mount', 'symlink boundary'],
+    network: ['k8s-api reachability', 'egress exfil', 'kubelet probe'],
+    privilege: ['docker socket', 'nsenter host pid', 'capability scan'],
+    secrets: ['service-account token', 'env var scrape', 'secret list'],
+    resource: ['fork bomb', 'memory pressure', 'disk fill'],
+  };
+
+  function colorFor(score) {
+    if (score >= 0.8) return 'var(--red)';
+    if (score >= 0.6) return 'var(--orange)';
+    if (score >= 0.35) return 'var(--yellow)';
+    if (score > 0) return 'var(--green)';
+    return 'var(--muted)';
+  }
+
+  function line(text, cls = '') {
+    const div = document.createElement('div');
+    div.className = 'line ' + cls;
+    div.innerHTML = text;
+    logs.appendChild(div);
+    logs.scrollTop = logs.scrollHeight;
+    eventCount++;
+    $('log-badge').textContent = `${eventCount} events`;
+  }
+
+  function setGate(status, title, copy) {
+    $('gate-status').textContent = status;
+    $('gate-status').className = 'gate-status ' + (status === 'BLOCKED' ? 'blocked' : status === 'CLEARED' ? 'cleared' : '');
+    $('gate-title').textContent = title;
+    $('gate-copy').textContent = copy;
+  }
+
+  async function probeSources() {
+    let liveCount = 0;
+    try {
+      const r = await fetch('/api/integrations/clickhouse', { cache: 'no-store' });
+      if (r.ok) { $('ch-status').textContent = 'live'; $('ch-status').className = 'pill live'; liveCount++; }
+    } catch {}
+    try {
+      const r = await fetch('/api/integrations/nimble', { cache: 'no-store' });
+      if (r.ok) { $('nimble-status').textContent = 'live'; $('nimble-status').className = 'pill live'; liveCount++; }
+    } catch {}
+    $('source-badge').textContent = liveCount ? `${liveCount}/2 live` : 'demo stream';
+  }
+
+  function reset() {
+    timers.forEach(clearTimeout); timers = [];
+    [...arena.querySelectorAll('.probe,.scar')].forEach(n => n.remove());
+    logs.innerHTML = ''; eventCount = 0; bestFitness = 0; chEvents = 0;
+    $('log-badge').textContent = '0 events'; $('loop-badge').textContent = 'idle';
+    $('gen-num').textContent = '—'; $('gen-title').textContent = 'Waiting for container spin-up';
+    $('gen-sub').textContent = 'The agent fires automatically, scores probes, kills weak genomes, and mutates survivors.';
+    $('best-score').textContent = '0.00'; $('ch-events').textContent = '0'; $('ch-best').textContent = '0.00';
+    $('nimble-seeds').textContent = '0'; $('nimble-fresh').textContent = 'demo'; $('core-state').textContent = 'deployment pending';
+    setGate('PENDING', 'Deployment gate armed', 'No human approves the deployment. The swarm decides from fitness evidence.');
+  }
+
+  function spawnProbe(gen, i, score, category) {
+    const probe = document.createElement('div');
+    probe.className = 'probe';
+    probe.dataset.score = score.toFixed(2);
+    probe.style.color = colorFor(score);
+    probe.style.background = colorFor(score);
+    const angle = (Math.PI * 2) * ((i * 0.618 + gen * 0.13) % 1);
+    const sx = 50 + Math.cos(angle) * 47;
+    const sy = 50 + Math.sin(angle) * 43;
+    const ex = 50 + Math.cos(angle) * (score >= 0.8 ? 4 : 13 + (1 - score) * 15);
+    const ey = 50 + Math.sin(angle) * (score >= 0.8 ? 4 : 13 + (1 - score) * 15);
+    probe.style.left = sx + '%'; probe.style.top = sy + '%';
+    arena.appendChild(probe);
+    requestAnimationFrame(() => { probe.style.left = ex + '%'; probe.style.top = ey + '%'; });
+    timers.push(setTimeout(() => {
+      probe.classList.add('hit');
+      const scar = document.createElement('div'); scar.className = 'scar'; scar.style.left = ex + '%'; scar.style.top = ey + '%'; scar.style.color = colorFor(score); arena.appendChild(scar);
+      timers.push(setTimeout(() => probe.remove(), 260));
+    }, 760));
+
+    const vector = vectors[category][(gen + i) % vectors[category].length];
+    const cls = score >= 0.8 ? 'bad' : score >= 0.6 ? 'hot' : score >= 0.35 ? 'warn' : 'good';
+    line(`<strong>[g${gen}-${category.slice(0,3)}-${String(i).padStart(2,'0')}]</strong> ${vector} → fitness <strong>${score.toFixed(2)}</strong>`, cls);
+    bestFitness = Math.max(bestFitness, score);
+    chEvents++;
+    $('best-score').textContent = bestFitness.toFixed(2);
+    $('ch-events').textContent = chEvents;
+    $('ch-best').textContent = bestFitness.toFixed(2);
+  }
+
+  function runEvolution(isHardened = false) {
+    reset(); hardened = isHardened;
+    $('loop-badge').textContent = isHardened ? 'hardened run' : 'autonomous run';
+    $('core-state').textContent = isHardened ? 'hardened config' : 'permissive config';
+    line('▶ container spin-up detected — OpenZerg starts without human approval', 'source');
+    line('▶ Nimble feed pulled recent CVE context for Generation 1 seeds', 'source');
+    $('nimble-seeds').textContent = seeds.length;
+    $('nimble-fresh').textContent = 'last 7d';
+    seeds.forEach(s => line(`  seed: ${s}`, 'source'));
+
+    const gens = isHardened
+      ? [[0.10,0.14,0.22,0.30,0.18,0.26,0.12], [0.12,0.20,0.28,0.33,0.24,0.18], [0.10,0.16,0.24,0.29,0.22], [0.08,0.14,0.20,0.25]]
+      : [[0.10,0.20,0.40,0.12,0.60,0.35,0.00], [0.28,0.45,0.62,0.68,0.38,0.55], [0.42,0.66,0.74,0.91,1.00]];
+
+    let t = 700;
+    gens.forEach((scores, idx) => {
+      const gen = idx + 1;
+      timers.push(setTimeout(() => {
+        $('gen-num').textContent = gen;
+        $('gen-title').textContent = `Generation ${gen}`;
+        $('gen-sub').textContent = gen === 1 ? 'Base vectors spawned from CVE/web seeds.' : 'Children spawned from survivors; weak genomes removed.';
+        line(`▶ generation_start g${gen}: spawning ${scores.length} isolated pods`, 'source');
+      }, t));
+      t += 360;
+      scores.forEach((score, i) => {
+        timers.push(setTimeout(() => spawnProbe(gen, i + 1, score, categories[(i + gen) % categories.length]), t));
+        t += 260;
+      });
+      timers.push(setTimeout(() => {
+        const max = Math.max(...scores);
+        const survivors = scores.filter(s => s >= 0.35).length;
+        const cls = max >= 0.8 ? 'bad' : max >= 0.6 ? 'hot' : 'warn';
+        line(`▶ generation_complete g${gen}: survivors=${survivors}, best_fitness=${max.toFixed(2)}, bottom_half=killed`, cls);
+      }, t + 200));
+      t += 900;
+    });
+
+    timers.push(setTimeout(() => {
+      if (bestFitness >= 0.8) {
+        setGate('BLOCKED', 'Deployment blocked by autonomous gate', `Best fitness ${bestFitness.toFixed(2)} exceeded policy threshold 0.80.`);
+        $('core-state').textContent = 'blocked';
+        line('■ Datadog alert would fire: near-breach / breach fitness threshold exceeded', 'bad');
+        line('■ ClickHouse stored generation scores for regression comparison', 'source');
+      } else {
+        setGate('CLEARED', 'Deployment cleared after convergence', `Four generations converged below policy threshold. Best fitness ${bestFitness.toFixed(2)}.`);
+        $('core-state').textContent = 'cleared';
+        line('■ convergence reached — no breach path survived mutation', 'good');
+        line('■ ClickHouse stored clean run as hardened baseline', 'source');
+      }
+      $('loop-badge').textContent = 'complete';
+    }, t + 300));
+  }
+
+  $('btn-run').onclick = () => runEvolution(false);
+  $('btn-hardened').onclick = () => runEvolution(true);
+  $('btn-reset').onclick = reset;
+
+  probeSources();
+  reset();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenZerg Prototypes</title>
+<style>
+  :root { color-scheme: dark; --bg:#08090b; --panel:#0d0f12; --border:#25282d; --ink:#f4f4f5; --dim:#9ca3af; --accent:#f4f4f5; --green:#a7f3d0; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); display:grid; place-items:center; padding:40px; }
+  main { width:min(980px, 100%); }
+  h1 { margin:0 0 10px; font-size:44px; line-height:0.98; letter-spacing:-0.055em; font-weight:720; }
+  p { margin:0; color:var(--dim); line-height:1.55; font-size:15px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1px; margin-top:32px; border:1px solid var(--border); background:var(--border); }
+  .card { display:block; text-decoration:none; color:inherit; border:0; background:var(--panel); border-radius:0; padding:22px; min-height:224px; transition:background 140ms cubic-bezier(.23,1,.32,1), color 140ms cubic-bezier(.23,1,.32,1); }
+  .card:hover { background:#12151a; }
+  .card:active { transform:scale(.995); }
+  .tag { display:inline-flex; border:1px solid var(--border); color:var(--dim); border-radius:0; padding:4px 7px; font-size:10px; text-transform:uppercase; letter-spacing:.14em; font-weight:700; }
+  h2 { margin:20px 0 8px; font-size:22px; letter-spacing:-.035em; font-weight:680; }
+  .cta { margin-top:22px; color:var(--green); font-weight:680; }
+  .note { margin-top:24px; padding:14px 16px; border:1px solid var(--border); background:var(--panel); border-radius:0; font-size:14px; color:var(--dim); }
+  code { color:var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <h1>OpenZerg prototypes</h1>
+  <p>Use this page to visually compare the old Carson-plan demo against the new pivot prototype. Click a card to open it.</p>
+
+  <section class="grid">
+    <a class="card" href="./evolution.html">
+      <span class="tag">New pivot</span>
+      <h2>Evolution Gate</h2>
+      <p>Generational swarm, fitness scoring, ClickHouse/Nimble source cards, and autonomous deployment decision.</p>
+      <div class="cta">Open new prototype →</div>
+    </a>
+
+    <a class="card" href="../index.html?mode=replay">
+      <span class="tag">Original</span>
+      <h2>Three-panel K8s Demo</h2>
+      <p>The Carson-plan visualization: kubectl pane, RTS containment map, raw exploit logs, replay mode.</p>
+      <div class="cta">Open old prototype →</div>
+    </a>
+
+    <a class="card" href="./openage-evolution.html">
+      <span class="tag">Branch remix</span>
+      <h2>OpenAge Evolution Remix</h2>
+      <p>The pivot concept recast as an open RTS siege: attack ages, keep defense, tech tree, fitness, and deployment gate.</p>
+      <div class="cta">Open remix prototype →</div>
+    </a>
+
+    <a class="card" href="../openzerg-map.html">
+      <span class="tag">Map only</span>
+      <h2>Containment Map</h2>
+      <p>The standalone Phaser map with attack animations, breach scars, audio controls, and manual swarm buttons.</p>
+      <div class="cta">Open map prototype →</div>
+    </a>
+  </section>
+
+  <div class="note">
+    If this page was opened from the local server, the URL should look like <code>http://localhost:5177/prototypes/</code>.
+  </div>
+</main>
+</body>
+</html>

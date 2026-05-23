@@ -5,6 +5,10 @@ assets/
 # Conversation transcript scratch from prep session — not source.
 Untitled
 
+# Local briefs / asset bundles used during hackathon prep.
+OPENZERG_PIVOT.pdf
+openzerg-assets.zip
+
 # Local node / build artifacts (if added later)
 node_modules/
 dist/
