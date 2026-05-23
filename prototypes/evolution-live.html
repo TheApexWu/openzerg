@@ -33,8 +33,7 @@
   h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; font-weight: 760; line-height: 1; }
   .run-counter {
     display: inline-flex; align-items: baseline; gap: 6px;
-    margin-left: 16px; padding-left: 16px;
-    border-left: 1px solid var(--border);
+    margin-left: 20px;
     font-variant-numeric: tabular-nums;
   }
   .run-counter-label {
@@ -45,36 +44,18 @@
     color: var(--ink); font-size: 16px; font-weight: 760; letter-spacing: -0.02em;
   }
   .run-counter-status {
-    display: inline-flex; align-items: center; gap: 6px;
     color: var(--muted); font-size: 11px;
     letter-spacing: 0.04em; font-weight: 600;
-    margin-left: 10px;
+    margin-left: 8px;
+    transition: color 160ms var(--ease-out), opacity 160ms var(--ease-out);
   }
-  .run-counter-status::before {
-    content: ''; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--muted); flex-shrink: 0;
-    transition: background 160ms var(--ease-out);
-  }
-  .run-counter-status.active::before {
-    background: var(--warn);
-    animation: dotpulse 1.4s var(--ease-in-out) infinite;
-  }
-  .run-counter-status.complete::before { background: var(--good); }
-  .run-counter-status.blocked::before  { background: var(--bad);  }
-  .run-counter-status.active   { color: var(--warn); }
-  .run-counter-status.complete { color: var(--good); }
-  .run-counter-status.blocked  { color: var(--bad);  }
-  @keyframes dotpulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(253, 230, 138, 0.5); }
-    50%      { box-shadow: 0 0 0 4px rgba(253, 230, 138, 0); }
-  }
+  .run-counter-status.active   { color: var(--ink); }
+  .run-counter-status.complete { color: var(--ink); }
+  .run-counter-status.blocked  { color: var(--ink); }
   .run-counter-queue {
-    color: var(--muted); font-size: 10px;
+    color: var(--dim); font-size: 10px;
     letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
-    margin-left: 10px;
-  }
-  .run-counter-queue::before {
-    content: '↳ '; color: var(--muted); opacity: 0.6; margin-right: 2px;
+    margin-left: 10px; opacity: 0.7;
   }
   .run-counter-queue.hidden { display: none; }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
