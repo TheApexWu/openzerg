@@ -31,33 +31,6 @@
   .brand { display: flex; align-items: center; gap: 4px; }
   .mark { width: 34px; height: 34px; background: transparent url('../zerg.svg') no-repeat center/contain; }
   h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; font-weight: 760; line-height: 1; }
-  .run-counter {
-    display: inline-flex; align-items: baseline; gap: 6px;
-    margin-left: 20px;
-    font-variant-numeric: tabular-nums;
-  }
-  .run-counter-label {
-    color: var(--muted); font-size: 10px;
-    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
-  }
-  .run-counter-num {
-    color: var(--ink); font-size: 16px; font-weight: 760; letter-spacing: -0.02em;
-  }
-  .run-counter-status {
-    color: var(--muted); font-size: 11px;
-    letter-spacing: 0.04em; font-weight: 600;
-    margin-left: 8px;
-    transition: color 160ms var(--ease-out), opacity 160ms var(--ease-out);
-  }
-  .run-counter-status.active   { color: var(--ink); }
-  .run-counter-status.complete { color: var(--ink); }
-  .run-counter-status.blocked  { color: var(--ink); }
-  .run-counter-queue {
-    color: var(--dim); font-size: 10px;
-    letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700;
-    margin-left: 10px; opacity: 0.7;
-  }
-  .run-counter-queue.hidden { display: none; }
   .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .actions { display: flex; gap: 8px; align-items: center; }
 
@@ -128,6 +101,9 @@
   }
   .logs-meta-count {
     color: var(--ink); font-size: 13px; font-weight: 700;
+  }
+  .logs-meta-divider {
+    color: var(--muted); opacity: 0.5; margin: 0 2px;
   }
   .logs {
     padding: 12px; overflow: auto; flex: 1; background: #090a0c;
@@ -272,12 +248,6 @@
     <div class="brand">
       <div class="mark"></div>
       <h1>OpenZerg</h1>
-      <span class="run-counter" id="run-counter" aria-live="polite">
-        <span class="run-counter-label">runs</span>
-        <span class="run-counter-num" id="run-counter-num">0</span>
-        <span class="run-counter-status" id="run-counter-status">idle</span>
-        <span class="run-counter-queue hidden" id="run-counter-queue"></span>
-      </span>
     </div>
     <div class="actions">
       <button id="btn-refresh">Refresh data</button>
@@ -335,6 +305,9 @@
       <div class="logs-meta hidden" id="logs-meta">
         <span class="logs-meta-label">events</span>
         <span class="logs-meta-count" id="log-badge">0</span>
+        <span class="logs-meta-divider">·</span>
+        <span class="logs-meta-label">runs</span>
+        <span class="logs-meta-count" id="run-num">0</span>
       </div>
       <div class="logs" id="logs"></div>
     </div>
@@ -585,26 +558,9 @@
     setGate('PENDING', 'Deployment gate armed', 'No human approves the deployment. The swarm decides from fitness evidence.');
   }
 
-  function updateRunCounter(status, activeKind) {
-    // status: 'idle' | 'active' | 'complete' | 'blocked'
-    const n = runs.length;
-    $('run-counter-num').textContent = n;
-    const el = $('run-counter-status');
-    el.className = 'run-counter-status ' + (status === 'idle' ? '' : status);
-    const kindLabel = activeKind ? ` · ${activeKind}` : '';
-    el.textContent = (status === 'active'   ? 'in progress'
-                   :  status === 'complete' ? 'complete'
-                   :  status === 'blocked'  ? 'blocked'
-                   :                          'idle') + (status === 'active' ? kindLabel : '');
-    // Queue badge
-    const q = $('run-counter-queue');
-    if (runQueue.length > 0) {
-      const upcoming = runQueue.map(k => k === 'hardened' ? 'hardened' : 'permissive').join(' → ');
-      q.textContent = `next: ${upcoming}`;
-      q.classList.remove('hidden');
-    } else {
-      q.classList.add('hidden');
-    }
+  function updateRunCounter(/* status, activeKind */) {
+    const el = $('run-num');
+    if (el) el.textContent = runs.length;
   }
 
   function reset() {
