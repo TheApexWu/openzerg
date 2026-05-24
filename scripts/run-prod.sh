@@ -30,9 +30,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # --- config (overridable) ----------------------------------------------------
-TARGET="${TARGET:-https://juice-shop-production-d0c5.up.railway.app}"
-POPULATION="${POPULATION:-3}"
-GENERATIONS="${GENERATIONS:-2}"
+TARGET="${TARGET:-https://docker-image-production-c431.up.railway.app/}"
+# TARGET="${TARGET:-https://www.senso.ai/}"
+POPULATION="${POPULATION:-5}"
+GENERATIONS="${GENERATIONS:-5}"
 OUT_DIR="${OUT_DIR:-./out}"
 KUBECONFIG_PATH="${KUBECONFIG:-$REPO_ROOT/k8s-1-36-0-do-0-nyc1-1779544226353-kubeconfig.yaml}"
 BIN="${BIN:-$REPO_ROOT/backend/bin/openzerg}"

@@ -116,7 +116,7 @@
   "non_goals": [
     "Do NOT attempt to attack anything other than the configured TARGET_URL.",
     "Do NOT attempt to escape the Kubernetes pods themselves; the pods are sandboxes for our attackers, not the target.",
-    "Do NOT implement a frontend / WebSocket / React UI. v1 is CLI + structured logs only. The HTML files in repo root are v1 artifacts and will be removed in M6.",
+    "[SUPERSEDED in M7] Frontend was originally a non-goal in v1; the live HTTP+SSE web UI is now first-class (see milestones[7]). The CLI still runs headlessly with no UI dependency, and `openzerg serve` ships the frontend embedded in the same binary.",
     "Do NOT integrate Datadog in v1. Stretch only.",
     "Do NOT port the 18 Python attack vectors literally. The new attack vectors are HTTP-shaped (SQLi, XSS, BOLA, etc.) and the PI agent generates them with Nimble's help.",
     "Do NOT publish the control-plane image; it runs locally.",
@@ -747,6 +747,122 @@
         "docs/ARCHITECTURE.md has a 'Nimble Integration' section documenting the resolved Crawl API and Proxy API endpoint shapes.",
         "summary.md from a Nimble-enabled run mentions which probes used nimble_crawl or nimble_proxy in their attack path (or notes 'no Nimble usage' if zero)."
       ]
+    },
+    {
+      "id": "M7",
+      "name": "Frontend + live event API (web UI served by the same binary)",
+      "goal": "`openzerg serve` runs an HTTP+SSE server on a single port that BOTH (a) streams live evolution events to connected browsers and (b) serves the frontend single-page app from the same process. The frontend is baked into the Go binary via embed.FS, so `./bin/openzerg serve --addr :8080` is the complete demo surface — no nginx, no separate dev server, no `npm run dev` required. The headless `openzerg run` path keeps working unchanged for CI / non-UI use.",
+      "rationale": "v1 shipped CLI-only per the original non_goal. M7 supersedes that constraint: a live visualization makes the evolutionary structure of the swarm legible during the 3-minute demo, and a single self-contained binary keeps the deploy story trivial. Embedding the frontend in the Go binary means there is exactly one artifact to ship and one port to open. SSE (server-sent events) is one-way (server -> browser) which is sufficient — every client -> server interaction (start run, cancel run) is a regular POST.",
+      "supersedes_non_goal": "non_goals[2] (no frontend / WebSocket / React UI)",
+      "frontend_serving_contract": {
+        "binary": "openzerg",
+        "subcommand": "serve",
+        "single_port": true,
+        "default_addr": ":8080",
+        "static_assets_mounted_at": "/ and /assets/*",
+        "static_assets_source_priority": [
+          "1. If --frontend <dir> flag is set: serve files from that directory on disk (dev mode, supports live editing).",
+          "2. Else: serve the embedded frontend baked into the binary via go embed.FS at compile time (production / demo mode).",
+          "3. There is no third option. The binary MUST be able to serve the frontend with no external files when only the binary is shipped."
+        ],
+        "embed_directive": "//go:embed all:frontend/dist  OR  //go:embed all:frontend  (the exact tree is decided in M7 task #1; the build must fail loudly if the embedded tree is empty)",
+        "index_html_route": "GET / -> embedded frontend/index.html with Content-Type text/html; charset=utf-8",
+        "spa_fallback": "Any GET that does not match an /api/* route and is not a known static asset falls back to serving index.html (so client-side routing works even though v1 frontend is single-page).",
+        "cache_headers": "Static assets (anything under /assets/*) get Cache-Control: public, max-age=300. index.html gets Cache-Control: no-store so a redeploy is picked up immediately.",
+        "no_cors_in_default_mode": "Single-origin: same binary serves both API and UI, so no CORS preflight is needed. A --cors-origin flag exists for the optional dev case where the frontend is served from a separate file server.",
+        "fail_loud_on_missing_embed": "On startup, the serve subcommand stats the embedded FS for index.html; if absent (e.g., build was run without the frontend tree present) it exits non-zero with a clear error pointing at the build instructions."
+      },
+      "components": [
+        {
+          "id": "events-broker",
+          "package": "internal/events",
+          "purpose": "Pub/sub broker for EvolutionEvent values. Bounded ring buffer (2000 events) so late-connecting SSE clients see immediate context. Single-process, in-memory."
+        },
+        {
+          "id": "http-api",
+          "package": "internal/api",
+          "purpose": "net/http server. SSE endpoint at /api/events plus REST endpoints for runs, run history, integration health, and a POST to start/cancel runs. ALSO serves the embedded frontend at /, /assets/*, and any unknown non-/api/ GET (SPA fallback)."
+        },
+        {
+          "id": "frontend",
+          "tree": "frontend/",
+          "purpose": "Plain-JS single-page UI (no React/Vite). Subscribes to /api/events, renders live probes in an arena, draws a mutation lineage graph, surfaces integration status pills, and exposes a Start Run form.",
+          "embedded_into_binary": true,
+          "embed_owner_file": "backend/internal/api/embed.go (declares the //go:embed directive; the only file allowed to know the on-disk frontend layout)."
+        }
+      ],
+      "event_schema": {
+        "envelope": "{type, run_id, seq, ts, payload}",
+        "types": [
+          "run_start",
+          "generation_start",
+          "pod_spawn",
+          "pod_log",
+          "pod_result",
+          "generation_end",
+          "mutation",
+          "nimble_call",
+          "breach",
+          "run_end",
+          "integration_status"
+        ],
+        "delivery": "SSE (text/event-stream). One event per `data:` chunk; clients auto-reconnect with Last-Event-ID for ring-buffer replay."
+      },
+      "routes": [
+        "GET    /healthz                       -> 200 ok",
+        "GET    /api/runs                      -> [{run_id, outcome, best_fitness, started_at, finished_at}]",
+        "GET    /api/runs/:id                  -> the per-run summary JSON",
+        "GET    /api/runs/current              -> snapshot of in-flight run (or 404)",
+        "POST   /api/runs                      -> body {target_url, population, generations, disable_nimble, enable_cve_seed}; starts a run (409 if one is already in flight)",
+        "POST   /api/runs/current/cancel       -> cancels the in-flight run",
+        "GET    /api/events                    -> SSE stream",
+        "GET    /api/integrations/openrouter   -> {ok, model}",
+        "GET    /api/integrations/nimble       -> {ok}",
+        "GET    /                              -> embedded frontend/index.html (no-store cache)",
+        "GET    /assets/*                      -> embedded static assets (max-age=300)",
+        "GET    /<anything else, non-/api>     -> SPA fallback: serve index.html"
+      ],
+      "tasks": [
+        "Implement internal/events package: Event type (tagged-union via Type field + json.RawMessage Payload), Broker with Publish/Subscribe/Unsubscribe + Recent(n), monotonic Seq counter, bounded ring buffer.",
+        "Refactor internal/spawn.RunPod to accept an optional ProgressEmitter callback that receives pod_spawn / pod_log / pod_result events.",
+        "Thread an events.Broker through cmd/openzerg/main.go runSwarm and runOneGeneration; emit run_start, generation_start, mutation, generation_end, breach, run_end. LLM mutation events are emitted from nextGenerationFromSurvivors.",
+        "Extend internal/store.RunStore with an event tail snapshot helper so a fresh SSE subscriber can also fetch the structured run snapshot via GET /api/runs/current.",
+        "Implement internal/api: http.ServeMux router, SSE handler with per-client write timeout + ping every 15s, RunController state machine (Idle/Running/Cancelling), embed.FS-backed static assets with SPA fallback, JSON helpers, structured slog request logging.",
+        "Implement the embed.FS frontend mount in internal/api/embed.go using //go:embed of the frontend tree at the repo root (frontend/). The handler MUST refuse to start if the embedded tree does not contain index.html.",
+        "Add openzerg serve subcommand: flags --addr, --frontend (dev override path that bypasses the embed), --kubeconfig, --out-dir, --cors-origin (optional). Same code paths as openzerg run; the only difference is that the run is triggered by POST /api/runs instead of by the CLI.",
+        "Create frontend/ tree: index.html (extracted from prototypes/evolution-live.html), src/{app.js, sse.js, api.js, arena.js, panels.js, lineage.js, store.js}, styles/main.css, assets/zerg.svg. No build step; plain ES modules served as-is from the embed.",
+        "Wire the frontend: EventSource subscribes to /api/events and dispatches into a tiny pub/sub store; arena.js maps pod_spawn/pod_result events to .probe DOM nodes positioned on the golden-angle spiral, colored by fitness; lineage.js draws an SVG parent->child graph from mutation events; panels.js renders the generation banner, integration pills, log panel, and history tab.",
+        "Add a Start Run form bound to POST /api/runs (target URL, population, generations, disable-nimble toggle, enable-cve-seed toggle). Disable controls while a run is in flight.",
+        "Update README.md with a 'Web UI' quick-start section: `./bin/openzerg serve` then open http://localhost:8080. Update docs/ARCHITECTURE.md with the new diagram showing the single-binary control-plane serving both the API and the UI."
+      ],
+      "verify": [
+        "cd backend && go build ./...",
+        "cd backend && go vet ./...",
+        "cd backend && go test ./internal/events/... ./internal/api/...",
+        "./bin/openzerg serve --addr :8080 &  # background",
+        "curl -fsS http://localhost:8080/healthz",
+        "curl -fsS http://localhost:8080/ | head -c 200  # should look like the index.html",
+        "curl -fsS -I http://localhost:8080/ | grep -i 'content-type: text/html'",
+        "curl -fsS -I http://localhost:8080/assets/zerg.svg | grep -i 'content-type: image/svg'",
+        "curl -fsS http://localhost:8080/api/integrations/openrouter | jq .",
+        "curl -N http://localhost:8080/api/events  # SSE stream stays open and emits ping events",
+        "Move the binary to a clean tmp dir with NO frontend/ on disk and re-run ./openzerg serve — it must still serve / and /assets/* from the embed."
+      ],
+      "acceptance": [
+        "openzerg serve starts on :8080 (or --addr) and /healthz returns 200.",
+        "GET / returns embedded index.html with Content-Type text/html and Cache-Control no-store.",
+        "GET /assets/zerg.svg returns the embedded SVG with Content-Type image/svg+xml and Cache-Control max-age=300.",
+        "The binary serves the frontend with NO frontend/ directory present on disk at runtime (i.e., the embed is the source of truth; --frontend is a dev-only override).",
+        "If the embed is empty at build time, the serve subcommand exits non-zero on startup with a clear error.",
+        "/api/events is an SSE stream that emits at least one event within 500ms of POST /api/runs.",
+        "Opening http://localhost:8080 in a browser renders the UI with zero JS console errors.",
+        "Arena renders one .probe element per live pod with color driven by streaming fitness; a fitness>=1.0 result animates the .hit -> .scar transition.",
+        "Lineage panel draws parent->child mutation edges between generations as they happen.",
+        "Mid-run SSE disconnect + reconnect resumes from the buffered ring without restarting the run (Last-Event-ID respected).",
+        "POST /api/runs returns 409 when a run is already in flight.",
+        "POST /api/runs/current/cancel terminates the in-flight run within 5s and emits run_end with outcome CANCELLED.",
+        "openzerg run (headless) still works identically with no dependency on serve."
+      ]
     }
   ],
 
@@ -782,7 +898,7 @@
     "start_command": "cd /home/carson/openzerg && (test -f backend/go.mod && cd backend && go build ./... || echo 'M0 not done')",
     "state_file": "/home/carson/openzerg/ralph-logs/STATE.md",
     "log_dir": "/home/carson/openzerg/ralph-logs/",
-    "stop_condition": "All milestones M0-M6 marked ACCEPTED in STATE.md AND `go build ./...` is green AND a sample ./out/summary-*.json exists with outcome in {BREACH, EXHAUSTED}.",
+    "stop_condition": "All milestones M0-M7 marked ACCEPTED in STATE.md AND `go build ./...` is green AND a sample ./out/summary-*.json exists with outcome in {BREACH, EXHAUSTED} AND `./bin/openzerg serve --addr :8080` boots cleanly with /healthz=200 and serves the embedded frontend at /.",
     "commit_style": {
       "format": "<type>(<scope>): <subject>",
       "allowed_types": ["feat", "fix", "chore", "docs", "refactor", "test", "build"],

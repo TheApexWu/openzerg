@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
 const DefaultBaseURL = "https://openrouter.ai/api/v1"
@@ -33,11 +32,15 @@ type Client struct {
 // New constructs a Client with sensible defaults. The caller must supply a
 // non-empty APIKey; callers without a key should not invoke the LLM mutation
 // path at all.
+//
+// The HTTP client has no timeout: model calls run until the agent finishes
+// or the parent context is cancelled. The caller controls deadlines via the
+// context passed to CreateChatCompletion.
 func New(apiKey string) *Client {
 	return &Client{
 		APIKey:    apiKey,
 		BaseURL:   DefaultBaseURL,
-		HTTP:      &http.Client{Timeout: 60 * time.Second},
+		HTTP:      &http.Client{}, // no timeout; caller controls via ctx
 		UserAgent: "openzerg-control-plane/0.1",
 		AppTitle:  "OpenZerg",
 	}

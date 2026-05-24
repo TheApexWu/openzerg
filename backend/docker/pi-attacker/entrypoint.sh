@@ -65,9 +65,10 @@ require_env OPENROUTER_API_KEY
 GENERATION="${GENERATION:-0}"
 RUN_ID="${RUN_ID:-unknown}"
 POD_ID="${POD_ID:-unknown}"
-TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-60}"
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-600}"
+SOFT_TIMEOUT_SECONDS="${SOFT_TIMEOUT_SECONDS:-60}"
 RATE_LIMIT_RPS="${RATE_LIMIT_RPS:-10}"
-PI_MODEL="${PI_MODEL:-google/gemma-4-26b-a4b-it}"
+PI_MODEL="${PI_MODEL:-qwen/qwen3.6-plus}"
 PI_PROVIDER="${PI_PROVIDER:-openrouter}"
 
 # Pull vector/category out of the GENOME JSON so the result line can echo
@@ -83,7 +84,40 @@ TARGET_PATH="$(printf '%s' "$GENOME" | jq -r '.target_path // ""')"
 REQUIRES_NIMBLE="$(printf '%s' "$GENOME" | jq -r '.requires_nimble // false')"
 export VECTOR CATEGORY
 
-log "starting attacker pod (vector=$VECTOR target=$TARGET_URL model=$PI_MODEL)"
+# Stamp a start time and two deadlines that the model can read between
+# probes via the wall-clock check helper in the attacker skill
+# (scripts/time_check.sh).
+#
+#   TIMEOUT_SECONDS      - HARD wrapper budget. We invoke pi via `timeout`
+#                          with this value, and the k8s pod has
+#                          activeDeadlineSeconds = this + 30 as kubelet
+#                          backstop. Going past it = the model gets killed
+#                          mid-tool-call and the run is wasted.
+#                          Default: 600s (10 minutes).
+#   SOFT_TIMEOUT_SECONDS - SOFT target the model aims for. The skill's
+#                          time_check.sh keys off SOFT_DEADLINE_EPOCH_MS
+#                          and returns WARN/EXPIRING as it approaches.
+#                          Going past it just means the model should be
+#                          wrapping up; nothing kills it.
+#                          Default: 60s.
+#
+# Exporting these puts them in pi's environment and thus also in the
+# environment of pi's bash tool invocations.
+START_EPOCH_MS="$(date +%s%3N)"
+if [ "$TIMEOUT_SECONDS" = "0" ]; then
+  DEADLINE_EPOCH_MS=0
+else
+  DEADLINE_EPOCH_MS=$(( START_EPOCH_MS + TIMEOUT_SECONDS * 1000 ))
+fi
+if [ "$SOFT_TIMEOUT_SECONDS" = "0" ]; then
+  SOFT_DEADLINE_EPOCH_MS=0
+else
+  SOFT_DEADLINE_EPOCH_MS=$(( START_EPOCH_MS + SOFT_TIMEOUT_SECONDS * 1000 ))
+fi
+export START_EPOCH_MS DEADLINE_EPOCH_MS SOFT_DEADLINE_EPOCH_MS \
+       TIMEOUT_SECONDS SOFT_TIMEOUT_SECONDS
+
+log "starting attacker pod (vector=$VECTOR target=$TARGET_URL model=$PI_MODEL soft=${SOFT_TIMEOUT_SECONDS}s hard=${TIMEOUT_SECONDS}s)"
 
 # Render the user prompt from the template by substituting placeholders.
 # Pi takes the prompt as a positional argument; the system prompt lives in
@@ -107,30 +141,47 @@ user_prompt="$(sed \
   -e "s|{{REQUIRES_NIMBLE}}|${REQUIRES_NIMBLE}|g" \
   "$user_prompt_path")"
 
-# Hard wall-clock cap so a stuck Pi session cannot outlive the pod's
-# activeDeadlineSeconds. `timeout` returns 124 on expiry; we treat that as
-# a NOOP outcome (the model didn't reach a verdict, but the infra worked).
-log "invoking pi --mode json (timeout=${TIMEOUT_SECONDS}s)"
 pi_stdout_log="/tmp/pi-stdout.log"
+# Stream Pi's output live to the pod's stdout (so `kubectl logs -f` shows
+# the attacker agent's reasoning / tool calls as they happen) while also
+# tee'ing it to a file we scan afterwards for the final result line.
+#
+# Notes:
+#   - `stdbuf -oL -eL` puts Pi into line-buffered mode so we don't have to
+#     wait for a 4KiB pipe buffer to flush before the first event appears
+#     in kubectl logs.
+#   - `2>&1` merges stderr into stdout BEFORE the tee so progress / error
+#     messages from Pi are interleaved correctly with its JSON events.
+#   - `tee` itself is line-oriented and forwards each line to the terminal
+#     immediately.
+#   - We rely on `set -o pipefail` (set at the top of this script) so the
+#     pipeline's exit status reflects Pi's, not tee's.
+log "--- pi event stream (begin) ---"
 set +e
-timeout "${TIMEOUT_SECONDS}" pi \
-  -p \
-  --mode json \
-  --no-session \
-  --provider "$PI_PROVIDER" \
-  --model "$PI_MODEL" \
-  "$user_prompt" \
-  > "$pi_stdout_log" 2>&1
-pi_exit=$?
-set -e
-
-# Echo Pi's JSONL events so they show up in `kubectl logs`. The control
-# plane parser ignores anything that is not the final result line.
-if [ -s "$pi_stdout_log" ]; then
-  log "--- pi event stream (begin) ---"
-  cat "$pi_stdout_log"
-  log "--- pi event stream (end) ---"
+if [ "${TIMEOUT_SECONDS}" = "0" ]; then
+  log "invoking pi --mode json (unlimited)"
+  stdbuf -oL -eL pi \
+    -p \
+    --mode json \
+    --no-session \
+    --provider "$PI_PROVIDER" \
+    --model "$PI_MODEL" \
+    "$user_prompt" \
+    2>&1 | tee "$pi_stdout_log"
+else
+  log "invoking pi --mode json (timeout=${TIMEOUT_SECONDS}s)"
+  stdbuf -oL -eL timeout "${TIMEOUT_SECONDS}" pi \
+    -p \
+    --mode json \
+    --no-session \
+    --provider "$PI_PROVIDER" \
+    --model "$PI_MODEL" \
+    "$user_prompt" \
+    2>&1 | tee "$pi_stdout_log"
 fi
+pi_exit=${PIPESTATUS[0]}
+set -e
+log "--- pi event stream (end) ---"
 
 # Pi runs in `--mode json` so its stdout is a stream of event JSON objects,
 # one per line. The model's final assistant text turn is delivered as a

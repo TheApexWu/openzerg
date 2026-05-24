@@ -2,7 +2,7 @@
 
 STATUS: DONE
 
-Last updated: 2026-05-23T19:46:00Z (all milestones M0-M6 ACCEPTED; STATUS flipped to DONE)
+Last updated: 2026-05-23T21:05:00Z (M7 ACCEPTED; all M0-M7 green; STATUS flipped to DONE)
 
 This file is the ledger of milestone state. The ralph loop reads it every
 iteration. Milestones marked `ACCEPTED` are sticky — the agent will not
@@ -102,7 +102,26 @@ See `RALPH_README.md` for state machine rules and update format.
         -> EXHAUSTED clean; summary notes "Nimble was disabled for this run"
     kubectl -n openzerg get pods                            -> No resources found
 
-
+### M7 — Frontend + live event API (web UI served by the same binary)
+- status: ACCEPTED
+- accepted_at: 2026-05-23T21:05:00Z
+- summary: `openzerg serve` boots HTTP+SSE on one port; events.Broker fans run_start/generation_start/pod_spawn/pod_result/generation_end/mutation/breach/run_end out to SSE clients with a 2000-event ring buffer and Last-Event-ID replay. internal/api wires routes, RunController state machine (single in-flight run; 409 on concurrent POST), embed.FS-backed frontend with SPA fallback, no-store on /, max-age=300 on assets. Frontend is plain ES modules + CSS embedded via //go:embed all:frontend_embed; binary works from a clean tmp dir with NO frontend/ on disk. Headless `openzerg run` path unchanged.
+- verify_evidence: |
+    cd backend && go build ./...                                       -> ok
+    cd backend && go vet ./...                                         -> ok
+    cd backend && go test ./...                                        -> ok (events 4 tests; all packages green)
+    ./bin/openzerg serve --addr :8088                                  -> listening
+    curl /healthz                                                      -> {"ok":true,...}
+    curl -I /                                                          -> 200 text/html no-store
+    curl -I /assets/zerg.svg                                           -> 200 image/svg+xml max-age=300
+    curl -I /totally/not/a/route                                       -> 200 text/html (SPA fallback)
+    curl /api/integrations/openrouter                                  -> {"ok":true,"model":"google/gemma-4-26b-a4b-it"}
+    curl /api/integrations/nimble                                      -> {"ok":true}
+    /tmp/.../openzerg-isolated serve --addr :8089 (no frontend/ on disk) -> all assets served from embed
+    POST /api/runs {target,population=1,gens=1}                        -> 202; SSE run_start arrived ~212ms after POST
+    POST /api/runs (again)                                             -> 409 "a run is already in flight"
+    POST /api/runs/current/cancel                                      -> 202 cancelling; runner exits with EXHAUSTED partial summary
+    kubectl -n openzerg get pods                                       -> No resources found
 
 ---
 

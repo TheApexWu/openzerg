@@ -21,6 +21,18 @@ const (
 	DefaultImage       = "registry.digitalocean.com/openzerg/pi-attacker:latest"
 	DefaultOutDir      = "./out"
 	DefaultRateLimit   = 60
+	// DefaultAttackerTimeoutSeconds is the HARD per-pod wall-clock budget.
+	// The entrypoint runs pi under `timeout`; the pod also gets
+	// activeDeadlineSeconds = this + 30 as a kubelet-level backstop. The
+	// model is killed mid-tool-call if it goes past, so this should be
+	// generous. 0 = unlimited.
+	DefaultAttackerTimeoutSeconds = 600
+	// DefaultAttackerSoftTimeoutSeconds is the SOFT per-pod budget the
+	// model is supposed to aim for. The attacker skill's time_check.sh
+	// helper returns WARN/EXPIRING as this deadline approaches, so the
+	// agent voluntarily wraps up and emits its final JSON result line.
+	// Going past it is fine; nothing kills the model. 0 = no soft target.
+	DefaultAttackerSoftTimeoutSeconds = 60
 )
 
 // RuntimeConfig is the merged view of flags + env that the run subcommand
@@ -34,6 +46,16 @@ type RuntimeConfig struct {
 	DryRun         bool
 	OutDir         string
 	RateLimitRPS   int
+	// AttackerTimeoutSeconds is the HARD per-pod wall-clock budget set as
+	// TIMEOUT_SECONDS on each pi-attacker pod. 0 = unlimited. The model
+	// gets SIGTERM if it goes past this; the pod's activeDeadlineSeconds
+	// is also set to this + 30.
+	AttackerTimeoutSeconds int
+	// AttackerSoftTimeoutSeconds is the SOFT per-pod target the agent
+	// aims for, set as SOFT_TIMEOUT_SECONDS on the pod. Surfaced to the
+	// model by the skill's time_check.sh helper so it wraps up early.
+	// Nothing kills the model when it elapses. 0 = no soft target.
+	AttackerSoftTimeoutSeconds int
 	KubeconfigPath string
 	EnvFilePath    string
 	// DisableNimble removes NIMBLE_API_KEY from pod env and sets
@@ -62,6 +84,8 @@ func ParseRunFlags(args []string, out io.Writer) (RuntimeConfig, error) {
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "plan but do not create pods (env OPENZERG_DRY_RUN)")
 	fs.StringVar(&cfg.OutDir, "out-dir", cfg.OutDir, "output directory (env OPENZERG_OUT_DIR)")
 	fs.IntVar(&cfg.RateLimitRPS, "rate-limit", cfg.RateLimitRPS, "aggregate req/s ceiling (env RATE_LIMIT_RPS)")
+	fs.IntVar(&cfg.AttackerTimeoutSeconds, "timeout-seconds", cfg.AttackerTimeoutSeconds, "HARD per-pod wall-clock budget in seconds, 0=unlimited (env TIMEOUT_SECONDS)")
+	fs.IntVar(&cfg.AttackerSoftTimeoutSeconds, "soft-timeout-seconds", cfg.AttackerSoftTimeoutSeconds, "SOFT per-pod target the agent aims for, 0=no target (env SOFT_TIMEOUT_SECONDS)")
 	fs.StringVar(&cfg.KubeconfigPath, "kubeconfig", cfg.KubeconfigPath, "kubeconfig path (env KUBECONFIG)")
 	fs.BoolVar(&cfg.DisableNimble, "disable-nimble", cfg.DisableNimble, "kill-switch: omit NIMBLE_API_KEY from pods and disable the in-pod nimble_fetch wrapper")
 	fs.BoolVar(&cfg.EnableCVESeed, "enable-cve-seed", cfg.EnableCVESeed, "use Nimble /v1/search at startup to seed one Gen-1 genome hint with a fresh CVE snippet")
@@ -88,6 +112,8 @@ func defaultRuntime() RuntimeConfig {
 		DryRun:         getenvBool("OPENZERG_DRY_RUN", false),
 		OutDir:         getenv("OPENZERG_OUT_DIR", DefaultOutDir),
 		RateLimitRPS:   getenvInt("RATE_LIMIT_RPS", DefaultRateLimit),
+		AttackerTimeoutSeconds:     getenvInt("TIMEOUT_SECONDS", DefaultAttackerTimeoutSeconds),
+		AttackerSoftTimeoutSeconds: getenvInt("SOFT_TIMEOUT_SECONDS", DefaultAttackerSoftTimeoutSeconds),
 		KubeconfigPath: ResolveKubeconfigPath(),
 		DisableNimble:  getenvBool("OPENZERG_DISABLE_NIMBLE", false),
 		EnableCVESeed:  getenvBool("OPENZERG_ENABLE_CVE_SEED", false),
@@ -107,6 +133,11 @@ func ResolveKubeconfigPath() string {
 	}
 	return filepath.Join(home, ".kube", "config")
 }
+
+// DefaultRuntimeConfig returns a RuntimeConfig seeded purely from env and
+// hard-coded defaults. The HTTP API uses this as the base when assembling a
+// config from a POST /api/runs body (which is JSON, not CLI flags).
+func DefaultRuntimeConfig() RuntimeConfig { return defaultRuntime() }
 
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

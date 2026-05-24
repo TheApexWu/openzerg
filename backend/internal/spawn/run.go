@@ -156,6 +156,14 @@ type PodOutcome struct {
 	Err error
 }
 
+// ProgressEmitter is a hook the API+SSE server installs to receive pod-level
+// progress events from the spawn fan-out. The interface is intentionally
+// tiny so spawn does not need to import internal/events directly.
+type ProgressEmitter interface {
+	OnPodSpawn(index int, pod *corev1.Pod)
+	OnPodResult(index int, result *PodResult, err error)
+}
+
 // RunPods fans out RunPod across the input pods, running them concurrently.
 // All outcomes are collected (one per input pod) and returned in input order.
 // A failure of any individual pod does NOT abort siblings; the swarm only
@@ -167,6 +175,13 @@ type PodOutcome struct {
 // the population sizes contemplated (≤15) are small enough that the kube
 // apiserver, not the control plane, becomes the bottleneck.
 func RunPods(ctx context.Context, cs kubernetes.Interface, pods []*corev1.Pod) ([]PodOutcome, error) {
+	return RunPodsWithEmitter(ctx, cs, pods, nil)
+}
+
+// RunPodsWithEmitter is RunPods plus a ProgressEmitter that receives
+// per-pod spawn / result callbacks while the fan-out is in flight. emitter
+// may be nil for headless callers; behaviour is otherwise identical.
+func RunPodsWithEmitter(ctx context.Context, cs kubernetes.Interface, pods []*corev1.Pod, emitter ProgressEmitter) ([]PodOutcome, error) {
 	if cs == nil {
 		return nil, fmt.Errorf("spawn.RunPods: nil clientset")
 	}
@@ -178,9 +193,15 @@ func RunPods(ctx context.Context, cs kubernetes.Interface, pods []*corev1.Pod) (
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if emitter != nil {
+				emitter.OnPodSpawn(i, p)
+			}
 			res, err := RunPod(ctx, cs, p)
 			outcomes[i].Result = res
 			outcomes[i].Err = err
+			if emitter != nil {
+				emitter.OnPodResult(i, res, err)
+			}
 		}()
 	}
 	wg.Wait()

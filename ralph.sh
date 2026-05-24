@@ -37,7 +37,7 @@ NEEDS_USER_FILE="${LOG_DIR}/NEEDS_USER.md"
 STOP_FILE="${LOG_DIR}/STOP"
 PRD_FILE="${PROJECT_ROOT}/PRD.json"
 
-MODEL="${RALPH_MODEL:-opencode/claude-opus-4-7}"
+MODEL="${RALPH_MODEL:-openrouter/anthropic/claude-opus-4.7}"
 OPENCODE_BIN="${OPENCODE_BIN:-opencode}"
 MAX_ITERS="${RALPH_MAX_ITERS:-200}"
 SLEEP_BETWEEN="${RALPH_SLEEP:-3}"

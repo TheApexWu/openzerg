@@ -38,6 +38,26 @@ cluster:
 ./bin/openzerg doctor
 ```
 
+## Web UI
+
+The same binary also serves an HTTP + SSE control surface with the live
+swarm visualisation baked in:
+
+```bash
+./bin/openzerg serve --addr :8080
+# open http://localhost:8080
+```
+
+`serve` and `run` share the runner — the UI just triggers it via
+`POST /api/runs` instead of CLI flags. The frontend (HTML + ES modules +
+CSS, no build step) is embedded into the Go binary via `go:embed`, so the
+binary is self-contained: copy it anywhere and `serve` works with no
+extra files. SSE streams `run_start`, `generation_start`, `pod_spawn`,
+`pod_result`, `mutation`, `breach`, and `run_end` events; the UI plots
+each pod on a golden-angle spiral and colours it by fitness as results
+arrive. A `--frontend <dir>` flag exists for editing the UI without
+rebuilding the binary.
+
 ## Sample output (truncated)
 
 ```

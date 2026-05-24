@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenZerg — live</title>
+<link rel="icon" href="/assets/zerg.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark"></div>
+        <div>
+          <h1>openzerg</h1>
+          <div class="subtitle">evolutionary swarm pen-tester</div>
+        </div>
+      </div>
+      <div class="actions">
+        <span class="pill" id="status-pill">idle</span>
+      </div>
+    </header>
+
+    <aside class="panel left">
+      <header><span class="eyebrow">integrations</span></header>
+      <div class="integrations" id="integrations">
+        <div class="integration-card">openrouter: <span id="int-openrouter">?</span></div>
+        <div class="integration-card">nimble:     <span id="int-nimble">?</span></div>
+      </div>
+      <header><span class="eyebrow">history</span></header>
+      <div class="history" id="history">no completed runs yet</div>
+    </aside>
+
+    <main class="panel center">
+      <header>
+        <span class="eyebrow">arena</span>
+        <span class="badge" id="generation-badge">gen --</span>
+      </header>
+      <div class="generation-banner">
+        <div class="gen-num" id="gen-num">--</div>
+        <div>
+          <div class="gen-title" id="gen-title">awaiting start</div>
+          <div class="gen-sub" id="gen-sub">no run in flight</div>
+        </div>
+        <div class="best">
+          <div class="score" id="best-score">0.00</div>
+          <div class="label">best fitness</div>
+        </div>
+      </div>
+      <div class="arena" id="arena">
+        <div class="core"></div>
+        <div class="core-caption">
+          <div class="name"><b id="target-name">target</b></div>
+          <div class="state" id="target-state">awaiting</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel right">
+      <header><span class="eyebrow">log</span></header>
+      <ol class="log" id="log"></ol>
+    </aside>
+
+    <footer class="gate">
+      <form id="start-form" class="start-form">
+        <input type="url" name="target_url" placeholder="https://juice-shop-production-d0c5.up.railway.app" required>
+        <input type="number" name="population" min="1" max="50" value="3" title="population">
+        <input type="number" name="generations" min="1" max="20" value="1" title="generations">
+        <label><input type="checkbox" name="disable_nimble"> disable nimble</label>
+        <label><input type="checkbox" name="enable_cve_seed"> CVE seed</label>
+        <button type="submit" class="primary" id="start-btn">start run</button>
+        <button type="button" id="cancel-btn">cancel</button>
+      </form>
+    </footer>
+  </div>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>

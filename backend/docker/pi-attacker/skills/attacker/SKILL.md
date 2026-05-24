@@ -23,13 +23,65 @@ ops team can identify our traffic.
 Respect the rate limit `{{RATE_LIMIT_RPS}}` requests/second. Insert
 `sleep` between requests if you make more than a few in a burst.
 
-You have **at most 60 seconds wall-clock** total. Plan for one or two
-useful probes — not a long crawl.
+## Wall-clock budget
+
+You run under TWO wall-clock budgets, both enforced by the pod
+entrypoint:
+
+- **SOFT target** (env `SOFT_TIMEOUT_SECONDS`, typically 60s): the
+  budget you should *aim* for. Nothing kills you when you cross it —
+  but the longer you run past it, the closer you get to the hard wall.
+- **HARD limit** (env `TIMEOUT_SECONDS`, typically 600s / 10 min): the
+  entrypoint runs Pi under `timeout $TIMEOUT_SECONDS` and the pod has
+  `activeDeadlineSeconds = TIMEOUT_SECONDS + 30`. Cross this and you
+  get `SIGTERM` mid-tool-call, the control plane never sees your final
+  JSON line, and the probe is wasted.
+
+Plan for ~1 minute of useful probing. Don't crawl. Don't loop.
+
+**You MUST check the wall clock between probes** using the helper:
+
+```
+/home/node/.pi/agent/skills/attacker/scripts/time_check.sh
+```
+
+It prints one line like
+`status=OK elapsed_ms=12345 soft_remaining_ms=47655 hard_remaining_ms=587655 soft_budget_ms=60000 hard_budget_ms=600000`
+and exits with a status-coded code. Possible `status=` values and what
+you must do:
+
+| status         | what it means                       | what you do                                                     |
+| -------------- | ----------------------------------- | --------------------------------------------------------------- |
+| UNLIMITED      | no deadlines set                    | proceed normally; no need to re-check                           |
+| OK             | >30s soft budget left               | proceed with the next probe                                     |
+| WARN           | ≤30s soft budget left               | finish the probe in flight; do NOT start another                |
+| EXPIRING       | past soft, or ≤10s soft left        | stop NOW; emit the final JSON result line with what you have    |
+| HARD_EXPIRING  | ≤30s HARD budget left               | EMERGENCY — emit the final JSON line in one shell call NOW      |
+| HARD_EXPIRED   | past hard deadline                  | you are about to be killed; emit a line if you somehow still can |
+
+Call the helper:
+- once right after you read this skill, to learn the budget,
+- again between any two probes / tool calls that each take more than a
+  few seconds (e.g. before a second `nimble_fetch`, before a slow `curl`,
+  before any `sleep`),
+- and any time you are about to start something that might be slow.
+
+When `status` is `WARN`, `EXPIRING`, `HARD_EXPIRING`, or `HARD_EXPIRED`,
+prefer emitting a `PARTIAL` / `RECON` / `NOOP` result based on whatever
+evidence you have already collected, rather than going silent. A truthful
+low-fitness result line is much more useful to the control plane than no
+line at all. If you have no useful evidence yet, emit `status: "NOOP"`
+with `evidence` set to e.g. `"ran out of wall-clock budget before probe completed"`.
 
 ## Tools available
 
 - `bash` (Pi built-in): use `curl -sS -i -H 'X-OpenZerg-Probe: true' ...`
   for raw HTTP. Use `jq` to shape JSON responses.
+- `time_check`: shell wrapper at
+  `/home/node/.pi/agent/skills/attacker/scripts/time_check.sh`. Run via
+  bash. Returns the remaining wall-clock budget. See the "Wall-clock
+  budget" section above for the contract — call it between probes and
+  obey the `status=` field.
 - `nimble_fetch`: shell wrapper at `/home/node/tools/nimble_fetch.sh`. Use
   this whenever you need a JS-rendered DOM from the target — Juice Shop is
   an Angular SPA and `curl` returns the empty shell. Invocation:

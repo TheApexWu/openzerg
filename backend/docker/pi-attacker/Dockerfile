@@ -31,6 +31,9 @@ WORKDIR /home/node
 
 # Ship the attacker skill into the per-user Pi skill directory.
 COPY --chown=node:node skills/attacker /home/node/.pi/agent/skills/attacker
+USER root
+RUN chmod +x /home/node/.pi/agent/skills/attacker/scripts/*.sh
+USER node
 
 # Prompt templates (system prompt + user prompt scaffold). The entrypoint
 # renders these with the per-pod TARGET_URL / GENOME values.
@@ -56,9 +59,16 @@ USER node
 #   OPENROUTER_API_KEY  — from k8s Secret openzerg-keys
 #   NIMBLE_API_KEY      — from k8s Secret openzerg-keys (M4)
 #   RATE_LIMIT_RPS      — cap for in-pod attack request rate
-#   TIMEOUT_SECONDS     — soft deadline (entrypoint also respects pod's
-#                         activeDeadlineSeconds)
-ENV TIMEOUT_SECONDS=60 \
+#   TIMEOUT_SECONDS     — HARD wall-clock budget. Entrypoint runs pi under
+#                         `timeout` with this value; pod also has
+#                         activeDeadlineSeconds = TIMEOUT_SECONDS + 30.
+#                         0 = unlimited.
+#   SOFT_TIMEOUT_SECONDS — SOFT target the agent aims for. The attacker
+#                         skill's time_check.sh helper surfaces remaining
+#                         budget so the agent wraps up early. Nothing kills
+#                         the model when it elapses. 0 = no soft target.
+ENV TIMEOUT_SECONDS=600 \
+    SOFT_TIMEOUT_SECONDS=60 \
     RATE_LIMIT_RPS=10
 
 ENTRYPOINT ["/home/node/entrypoint.sh"]

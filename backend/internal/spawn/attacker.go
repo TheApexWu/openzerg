@@ -66,8 +66,17 @@ type AttackerPodOptions struct {
 	TargetURL string
 	// RateLimitRPS is the in-pod request-rate cap. Required.
 	RateLimitRPS int
-	// TimeoutSeconds is the soft per-pod time budget. Defaults to 60.
+	// TimeoutSeconds is the HARD per-pod time budget. The entrypoint runs
+	// pi under `timeout $TIMEOUT_SECONDS`, and we also set
+	// activeDeadlineSeconds = TimeoutSeconds + 30 on the pod as a kubelet
+	// backstop. 0 = unlimited. Going past this kills the model mid-call.
 	TimeoutSeconds int
+	// SoftTimeoutSeconds is the SOFT target the model aims for. The
+	// attacker skill's time_check.sh helper returns WARN/EXPIRING as this
+	// deadline approaches so the model wraps up gracefully and emits its
+	// final JSON result line. Going past it is fine; nothing kills the
+	// model. 0 = no soft pressure. Should be <= TimeoutSeconds.
+	SoftTimeoutSeconds int
 	// Labels are merged onto the pod. An "openzerg/role: attacker" label
 	// is always added.
 	Labels map[string]string
@@ -82,7 +91,7 @@ type AttackerPodOptions struct {
 // Required envs on the container (mirrors data_contracts.attacker_pod_env
 // in PRD.json):
 //   - TARGET_URL, GENOME, GENERATION, RUN_ID, POD_ID
-//   - RATE_LIMIT_RPS, TIMEOUT_SECONDS
+//   - RATE_LIMIT_RPS, TIMEOUT_SECONDS, SOFT_TIMEOUT_SECONDS
 //   - OPENROUTER_API_KEY, NIMBLE_API_KEY (from openzerg-keys Secret via envFrom)
 func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 	if opts.Name == "" {
@@ -116,8 +125,17 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 		keysSecret = DefaultKeysSecretName
 	}
 	timeoutSeconds := opts.TimeoutSeconds
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = 60
+	if timeoutSeconds < 0 {
+		timeoutSeconds = 0
+	}
+	softTimeoutSeconds := opts.SoftTimeoutSeconds
+	if softTimeoutSeconds < 0 {
+		softTimeoutSeconds = 0
+	}
+	// A soft deadline beyond the hard deadline is nonsensical: the model
+	// would never be told to wrap up before the kernel killed it. Clamp.
+	if timeoutSeconds > 0 && softTimeoutSeconds > timeoutSeconds {
+		softTimeoutSeconds = timeoutSeconds
 	}
 
 	labels := map[string]string{"openzerg/role": "attacker"}
@@ -125,11 +143,20 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 		labels[k] = v
 	}
 
-	activeDeadline := int64(120)
 	automountToken := false
 	runAsNonRoot := true
 	allowPrivilegeEscalation := false
 	runAsUID := AttackerNonRootUID
+
+	// When TimeoutSeconds is 0 the caller wants the agent to run until it
+	// finishes, so leave ActiveDeadlineSeconds unset (no kubelet kill).
+	// Otherwise set a kubelet hard-stop slightly above the hard budget so
+	// the `timeout` wrapper in entrypoint.sh always wins the race.
+	var activeDeadlinePtr *int64
+	if timeoutSeconds > 0 {
+		deadline := int64(timeoutSeconds + 30)
+		activeDeadlinePtr = &deadline
+	}
 
 	containerEnv := []corev1.EnvVar{
 		{Name: "TARGET_URL", Value: opts.TargetURL},
@@ -139,6 +166,7 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 		{Name: "POD_ID", Value: opts.PodID},
 		{Name: "RATE_LIMIT_RPS", Value: fmt.Sprintf("%d", opts.RateLimitRPS)},
 		{Name: "TIMEOUT_SECONDS", Value: fmt.Sprintf("%d", timeoutSeconds)},
+		{Name: "SOFT_TIMEOUT_SECONDS", Value: fmt.Sprintf("%d", softTimeoutSeconds)},
 	}
 	if opts.DisableNimble {
 		containerEnv = append(containerEnv,
@@ -168,7 +196,7 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 		},
 		Spec: corev1.PodSpec{
 			RestartPolicy:                corev1.RestartPolicyNever,
-			ActiveDeadlineSeconds:        &activeDeadline,
+			ActiveDeadlineSeconds:        activeDeadlinePtr,
 			AutomountServiceAccountToken: &automountToken,
 			ImagePullSecrets:             imagePullSecrets,
 			SecurityContext: &corev1.PodSecurityContext{

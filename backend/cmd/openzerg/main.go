@@ -3,36 +3,26 @@
 // Subcommands:
 //   - version: print build version and exit.
 //   - doctor:  print env / kubeconfig / secret status; never mutate cluster.
-//   - run:     run an evolution. M1 only supports --dry-run (planning print).
-//
-// Real cluster operations land in M2.
+//   - run:     run an evolution (headless).
+//   - serve:   start the HTTP + SSE server with embedded frontend.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/TheApexWu/openzerg/backend/internal/attacks"
+	"github.com/TheApexWu/openzerg/backend/internal/api"
 	"github.com/TheApexWu/openzerg/backend/internal/config"
-	"github.com/TheApexWu/openzerg/backend/internal/evolve"
+	"github.com/TheApexWu/openzerg/backend/internal/events"
 	"github.com/TheApexWu/openzerg/backend/internal/k8s"
 	"github.com/TheApexWu/openzerg/backend/internal/nimble"
-	"github.com/TheApexWu/openzerg/backend/internal/openrouter"
+	"github.com/TheApexWu/openzerg/backend/internal/runner"
 	"github.com/TheApexWu/openzerg/backend/internal/secrets"
-	"github.com/TheApexWu/openzerg/backend/internal/spawn"
-	"github.com/TheApexWu/openzerg/backend/internal/store"
 )
 
 // version is the build-time version string. It is overridden at link time via
@@ -61,6 +51,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return cmdDoctor(rest, stdout)
 	case "run":
 		return cmdRun(rest, stdout, stderr)
+	case "serve":
+		return cmdServe(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		fmt.Fprintf(stdout, "openzerg %s\n", version)
 		printUsage(stdout)
@@ -75,7 +67,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprint(w, `usage: openzerg <command> [flags]
 
 commands:
-  run       run an evolutionary attack swarm against --target
+  run       run an evolutionary attack swarm against --target (headless)
+  serve     run the HTTP + SSE server with the embedded web UI
   doctor    print env / kubeconfig / secret status (no side effects)
   version   print build version
 
@@ -216,296 +209,57 @@ func defaultEnvPath() string {
 // by RALPH_README.
 const preferredOpenRouterModel = "google/gemma-4-26b-a4b-it"
 
-// llmMutationCallBudget caps total OpenRouter requests across one run.
-// Matches integrations.openrouter.budget_guardrail in PRD.json.
-const llmMutationCallBudget = 32
-
-// survivorFitnessThreshold and survivorCap mirror evolution_loop in PRD.json.
-const (
-	survivorFitnessThreshold = 0.1
-	survivorCap              = 7
-)
-
-// runSwarm is the cluster-touching path of `openzerg run`. It runs the full
-// N-generation evolutionary loop: spawn pods, score results, pick survivors,
-// mutate, repeat. Stops on first fitness=1.0 OR after --generations,
-// whichever comes first. SIGINT writes a partial summary and returns nil.
+// runSwarm wraps runner.Run for the headless `openzerg run` path. The
+// HTTP-driven path in `openzerg serve` uses runner.Run directly.
 func runSwarm(stdout, stderr io.Writer, cfg config.RuntimeConfig) error {
-	cr, err := k8s.BuildClientset(cfg.KubeconfigPath)
-	if err != nil {
-		return fmt.Errorf("run: build clientset: %w", err)
+	swarmRunner := &runner.Runner{
+		Cfg:           cfg,
+		EnvFilePath:   defaultEnvPath(),
+		Stdout:        stdout,
+		Stderr:        stderr,
+		InstallSignal: true,
 	}
-	fmt.Fprintln(stdout, "")
-	fmt.Fprintf(stdout, "kube client: ready (in-cluster=%t)\n", cr.InCluster)
-
-	runID := fmt.Sprintf("r%d", time.Now().Unix())
-	runStore := store.NewRunStore(runID, cfg.TargetURL)
-	runStore.NimbleEnabled = !cfg.DisableNimble
-
-	// Optional OpenRouter client for LLM mutation. Missing key falls back
-	// to pure-Go mutation; we never gate the run on it.
-	openRouterClient := buildOpenRouterClientIfAvailable(stdout)
-	llmBudget := &evolve.LLMMutationBudget{Remaining: llmMutationCallBudget}
-
-	rootContext, cancelRoot := context.WithCancel(context.Background())
-	defer cancelRoot()
-	installSignalHandler(rootContext, cancelRoot, stdout, runStore)
-
-	var currentPopulation []attacks.Genome
-	if cfg.DisableNimble {
-		currentPopulation = attacks.PickSeedGenomes(cfg.Population)
-	} else {
-		currentPopulation = attacks.PickSeedGenomesEnsuringNimble(cfg.Population)
-	}
-	if cfg.EnableCVESeed && !cfg.DisableNimble {
-		currentPopulation = applyCVESeedHint(stdout, currentPopulation)
-	}
-	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	for generationNumber := 1; generationNumber <= cfg.Generations; generationNumber++ {
-		if rootContext.Err() != nil {
-			runStore.Cancelled = true
-			break
-		}
-		fmt.Fprintf(stdout, "\n=== generation %d/%d: spawning %d pods ===\n",
-			generationNumber, cfg.Generations, len(currentPopulation))
-
-		scored, gerr := runOneGeneration(rootContext, cr.Clientset, stdout, cfg, runID, generationNumber, currentPopulation)
-		if gerr != nil && rootContext.Err() == nil {
-			return fmt.Errorf("run: generation %d: %w", generationNumber, gerr)
-		}
-		runStore.RecordGeneration(generationNumber, scored)
-
-		if runStore.Breach != nil {
-			fmt.Fprintf(stdout, "\nBREACH detected in generation %d. Stopping.\n", generationNumber)
-			break
-		}
-		if generationNumber == cfg.Generations {
-			break
-		}
-
-		survivors := evolve.PickSurvivors(scored, survivorFitnessThreshold, survivorCap)
-		fmt.Fprintf(stdout, "survivors: %d (threshold %.2f, cap %d)\n",
-			len(survivors), survivorFitnessThreshold, survivorCap)
-
-		currentPopulation = nextGenerationFromSurvivors(
-			rootContext, openRouterClient, llmBudget,
-			survivors, cfg.Population, cfg.TargetURL, randomGenerator,
-			stdout,
-		)
-	}
-
-	if rootContext.Err() != nil {
-		runStore.Cancelled = true
-	}
-	runStore.Finalize()
-	jsonPath, mdPath, werr := runStore.WriteArtifacts(cfg.OutDir)
-	if werr != nil {
-		fmt.Fprintf(stderr, "summary write error: %v\n", werr)
-	} else {
-		fmt.Fprintf(stdout, "\nsummary: %s\n         %s\n", jsonPath, mdPath)
-	}
-	fmt.Fprintf(stdout, "outcome: %s (best fitness %.2f)\n", runStore.Outcome, runStore.BestFitness)
-	fmt.Fprintln(stdout, "run: ok")
-	return nil
+	_, _, _, err := swarmRunner.Run(context.Background())
+	return err
 }
 
-// runOneGeneration builds N pods from currentPopulation, fans them out via
-// spawn.RunPods, prints per-pod outcomes, and returns the scored result for
-// each. Pod build failures become a fitness-0.0 ScoredGenome so the loop
-// stays the same shape.
-func runOneGeneration(
-	ctx context.Context,
-	clientset kubernetes.Interface,
-	stdout io.Writer,
-	cfg config.RuntimeConfig,
-	runID string,
-	generationNumber int,
-	population []attacks.Genome,
-) ([]evolve.ScoredGenome, error) {
-	pods := make([]*corev1.Pod, 0, len(population))
-	podIDs := make([]string, 0, len(population))
-	for podIndex, genome := range population {
-		podID := fmt.Sprintf("%s-g%d-p%d", runID, generationNumber, podIndex)
-		pod, perr := spawn.BuildAttackerPod(spawn.AttackerPodOptions{
-			Name:           fmt.Sprintf("openzerg-attacker-%s-g%d-p%d", runID, generationNumber, podIndex),
-			Namespace:      cfg.Namespace,
-			Image:          cfg.AttackerImage,
-			Genome:         genome,
-			RunID:          runID,
-			PodID:          podID,
-			Generation:     generationNumber,
-			TargetURL:      cfg.TargetURL,
-			RateLimitRPS:   cfg.RateLimitRPS,
-			TimeoutSeconds: 60,
-			DisableNimble:  cfg.DisableNimble,
-		})
-		if perr != nil {
-			return nil, fmt.Errorf("build pod %d: %w", podIndex, perr)
-		}
-		pods = append(pods, pod)
-		podIDs = append(podIDs, podID)
+// cmdServe runs the HTTP+SSE control surface. The frontend is embedded into
+// the binary at compile time; a --frontend flag exists for dev overrides.
+func cmdServe(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	addr := fs.String("addr", ":8080", "HTTP listen address")
+	frontendDir := fs.String("frontend", "", "serve frontend from this directory instead of the embedded tree (dev mode)")
+	kubeconfigPath := fs.String("kubeconfig", config.ResolveKubeconfigPath(), "kubeconfig path passed to runs")
+	outDir := fs.String("out-dir", "./out", "directory the runner writes summary artifacts into")
+	corsOrigin := fs.String("cors-origin", "", "if set, allow CORS for this origin on /api/* (dev only)")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	generationContext, cancelGeneration := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancelGeneration()
-	outcomes, err := spawn.RunPods(generationContext, clientset, pods)
-	if err != nil {
-		return nil, fmt.Errorf("RunPods: %w", err)
-	}
-
-	scored := make([]evolve.ScoredGenome, 0, len(outcomes))
-	for _, outcome := range outcomes {
-		result := evolve.Result{}
-		podID := ""
-		if outcome.Index < len(podIDs) {
-			podID = podIDs[outcome.Index]
-		}
-		genome := population[outcome.Index]
-		if outcome.Err != nil {
-			fmt.Fprintf(stdout, "[gen %d pod %d] ERROR %v\n", generationNumber, outcome.Index, outcome.Err)
-			result.Status = "ERROR"
-			result.Evidence = outcome.Err.Error()
-		} else if outcome.Result == nil || len(outcome.Result.RawLine) == 0 {
-			parseErr := error(nil)
-			if outcome.Result != nil {
-				parseErr = outcome.Result.ParseError
-			}
-			fmt.Fprintf(stdout, "[gen %d pod %d] no result line (parse=%v)\n", generationNumber, outcome.Index, parseErr)
-			result.Status = "ERROR"
-			result.Evidence = "no JSON result line"
-		} else {
-			if err := json.Unmarshal(outcome.Result.RawLine, &result); err != nil {
-				fmt.Fprintf(stdout, "[gen %d pod %d] decode error: %v raw=%s\n",
-					generationNumber, outcome.Index, err, string(outcome.Result.RawLine))
-				result.Status = "ERROR"
-				result.Evidence = "result line decode failed"
-			}
-			fmt.Fprintf(stdout, "[gen %d pod %d] %s\n", generationNumber, outcome.Index, string(outcome.Result.RawLine))
-		}
-		fitness := evolve.Score(result)
-		fmt.Fprintf(stdout, "[gen %d pod %d] fitness=%.2f vector=%s status=%s\n",
-			generationNumber, outcome.Index, fitness, genome.Vector, result.Status)
-		scored = append(scored, evolve.ScoredGenome{
-			Genome:  genome,
-			Result:  result,
-			Fitness: fitness,
-			PodID:   podID,
-		})
-	}
-	return scored, nil
-}
-
-// nextGenerationFromSurvivors builds the next generation's genome list. If
-// an OpenRouter client is available and the budget allows, it asks Gemma 4
-// for half the slots; the rest comes from pure-Go Mutate. Any LLM failure
-// falls back silently to all-Mutate.
-func nextGenerationFromSurvivors(
-	ctx context.Context,
-	openRouterClient *openrouter.Client,
-	llmBudget *evolve.LLMMutationBudget,
-	survivors []attacks.Genome,
-	populationSize int,
-	targetURL string,
-	random *rand.Rand,
-	stdout io.Writer,
-) []attacks.Genome {
-	if openRouterClient != nil && llmBudget.Remaining > 0 && len(survivors) > 0 {
-		llmCount := populationSize / 2
-		llmContext, llmCancel := context.WithTimeout(ctx, 30*time.Second)
-		llmGenomes, llmErr := evolve.MutateLLM(llmContext, openRouterClient,
-			preferredOpenRouterModel, survivors, llmCount, targetURL, llmBudget)
-		llmCancel()
-		if llmErr != nil {
-			fmt.Fprintf(stdout, "llm-mutation: skipped (%v); falling back to pure-Go\n", llmErr)
-			return evolve.Mutate(evolve.MutationContext{
-				Survivors: survivors, PopulationSize: populationSize, Random: random,
-			})
-		}
-		fmt.Fprintf(stdout, "llm-mutation: produced %d genomes (budget remaining: %d)\n",
-			len(llmGenomes), llmBudget.Remaining)
-		// Top up the remainder with pure-Go mutations so we always hit
-		// populationSize exactly.
-		remainder := evolve.Mutate(evolve.MutationContext{
-			Survivors: survivors, PopulationSize: populationSize - len(llmGenomes), Random: random,
-		})
-		combined := append(llmGenomes, remainder...)
-		if len(combined) > populationSize {
-			combined = combined[:populationSize]
-		}
-		return combined
-	}
-	return evolve.Mutate(evolve.MutationContext{
-		Survivors: survivors, PopulationSize: populationSize, Random: random,
+	server, err := api.NewServer(api.ServerConfig{
+		Addr:           *addr,
+		FrontendDir:    *frontendDir,
+		KubeconfigPath: *kubeconfigPath,
+		OutDir:         *outDir,
+		EnvFilePath:    defaultEnvPath(),
+		CORSOrigin:     *corsOrigin,
+		Stdout:         stdout,
+		Stderr:         stderr,
 	})
-}
-
-// buildOpenRouterClientIfAvailable returns a configured client if the env
-// has OPENROUTER_API_KEY, else nil. Missing key is logged but never fatal.
-func buildOpenRouterClientIfAvailable(stdout io.Writer) *openrouter.Client {
-	envFilePath := defaultEnvPath()
-	cfg, err := secrets.Load(envFilePath)
 	if err != nil {
-		fmt.Fprintf(stdout, "secrets: load error (%v); LLM mutation disabled\n", err)
-		return nil
+		return err
 	}
-	if !cfg.HasOpenRouter() {
-		fmt.Fprintln(stdout, "OPENROUTER_API_KEY missing; LLM mutation disabled (pure-Go only)")
-		return nil
-	}
-	return openrouter.New(cfg.OpenRouterAPIKey)
+	fmt.Fprintf(stdout, "openzerg %s\n", version)
+	fmt.Fprintf(stdout, "serve: listening on %s\n", *addr)
+	return server.ListenAndServe(context.Background())
 }
 
-// installSignalHandler wires SIGINT / SIGTERM to cancel the root context so
-// the generation loop exits early. We still finalize and write a partial
-// summary at the end of runSwarm.
-func installSignalHandler(ctx context.Context, cancel context.CancelFunc, stdout io.Writer, runStore *store.RunStore) {
-	signalChannel := make(chan os.Signal, 1)
-	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		select {
-		case sig := <-signalChannel:
-			fmt.Fprintf(stdout, "\nreceived %s; cancelling run...\n", sig)
-			runStore.Cancelled = true
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-}
-
-// applyCVESeedHint queries Nimble's /v1/search for an OWASP Juice Shop CVE
-// snippet and appends it to the first genome's hint. Best-effort: any
-// failure is logged and the population is returned untouched so the run
-// proceeds. Demos turn this off by default so seeds stay deterministic.
-func applyCVESeedHint(stdout io.Writer, population []attacks.Genome) []attacks.Genome {
-	if len(population) == 0 {
-		return population
-	}
-	envFilePath := defaultEnvPath()
-	cfg, err := secrets.Load(envFilePath)
-	if err != nil || !cfg.HasNimble() {
-		fmt.Fprintln(stdout, "cve-seed: NIMBLE_API_KEY missing; skipping")
-		return population
-	}
-	nimbleClient := nimble.New(cfg.NimbleAPIKey)
-	searchContext, cancelSearch := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancelSearch()
-	results, err := nimbleClient.SearchWeb(searchContext,
-		"OWASP Juice Shop CVE recent vulnerability",
-		nimble.SearchOptions{MaxResults: 3, SearchDepth: "lite"})
-	if err != nil {
-		fmt.Fprintf(stdout, "cve-seed: search failed: %v\n", err)
-		return population
-	}
-	if len(results) == 0 {
-		fmt.Fprintln(stdout, "cve-seed: no results")
-		return population
-	}
-	top := results[0]
-	fmt.Fprintf(stdout, "cve-seed: %q -> %s\n", top.Title, top.URL)
-	population[0].Hint = population[0].Hint + " [cve-seed: " + top.Title + " — " + top.Snippet + "]"
-	return population
-}
+// brokerForCLI is unused by the CLI but kept here to make the events.Broker
+// import explicit; the runner always allocates its own broker when Run is
+// called. Removing this would also work but the broker package will be
+// reused in main_test in a future iteration.
+var brokerForCLI = events.NewBroker
 
 func presence(ok bool) string {
 	if ok {
