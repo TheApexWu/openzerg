@@ -1,0 +1,14 @@
+{
+  "//": "Pi model registry overrides for the OpenZerg attacker pod. The qwen/qwen3.6-plus model upstream (Alibaba) rejects requests whose system message is sent with the newer OpenAI 'developer' role, returning HTTP 400 'developer is not one of [system, assistant, user, tool, function]'. Pi's built-in compat block for this model leaves supportsDeveloperRole unset (defaulting to true), so we force it to false here. Update or remove this file if/when Pi's bundled definition for qwen/qwen3.6-plus learns the right default.",
+  "providers": {
+    "openrouter": {
+      "modelOverrides": {
+        "qwen/qwen3.6-plus": {
+          "compat": {
+            "supportsDeveloperRole": false
+          }
+        }
+      }
+    }
+  }
+}

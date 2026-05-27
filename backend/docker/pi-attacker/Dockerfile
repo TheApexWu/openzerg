@@ -14,7 +14,7 @@ FROM node:22-bookworm-slim
 # Tools the attacker skill needs from inside the pod:
 #  - curl: raw HTTP probes against the target.
 #  - jq:   JSON shaping for the final result line.
-#  - ca-certificates: TLS to the target (Juice Shop is on Railway HTTPS).
+#  - ca-certificates: TLS to the target (HTTPS).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl jq ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -34,6 +34,14 @@ COPY --chown=node:node skills/attacker /home/node/.pi/agent/skills/attacker
 USER root
 RUN chmod +x /home/node/.pi/agent/skills/attacker/scripts/*.sh
 USER node
+
+# Pi model registry overrides. We need to flip supportsDeveloperRole=false
+# for qwen/qwen3.6-plus on the openrouter provider — Pi's built-in compat
+# block leaves it unset (defaulting to true), but Alibaba upstream rejects
+# the OpenAI-style 'developer' role with HTTP 400, killing every probe
+# before the model can produce a result line. See pi-config/models.json
+# for the override and full context.
+COPY --chown=node:node pi-config/models.json /home/node/.pi/agent/models.json
 
 # Prompt templates (system prompt + user prompt scaffold). The entrypoint
 # renders these with the per-pod TARGET_URL / GENOME values.
