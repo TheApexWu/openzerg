@@ -90,7 +90,7 @@ type RenderedPage struct {
 }
 
 // FetchOptions tunes the /v1/extract request. Zero values are sensible
-// defaults for the OWASP Juice Shop Angular SPA target.
+// defaults for SPA and server-rendered targets alike.
 type FetchOptions struct {
 	// Render forces JavaScript execution. Default true for SPAs.
 	Render bool

@@ -160,7 +160,7 @@ func TestSearchWeb_HappyPath(t *testing.T) {
 	defer server.Close()
 
 	client := New("test-key").WithBaseURL(server.URL)
-	results, err := client.SearchWeb(context.Background(), "owasp juice shop cve", SearchOptions{})
+	results, err := client.SearchWeb(context.Background(), "web application cve", SearchOptions{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

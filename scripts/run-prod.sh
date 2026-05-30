@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # OpenZerg production run script.
 #
-# This is the canonical demo invocation: one evolutionary swarm against the
-# authorized OWASP Juice Shop instance on Railway. Defaults are tuned for
-# the recorded demo (pop=3, gens=2, ~90s wall clock, gen-1 BREACH expected
-# via sqli_login).
+# This is the canonical demo invocation: one evolutionary swarm against an
+# authorized target. Override TARGET to point at any authorized web app.
 #
 # Prereqs (one-time):
 #   1. .env at repo root with OPENROUTER_API_KEY and NIMBLE_API_KEY.
@@ -30,12 +28,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # --- config (overridable) ----------------------------------------------------
-TARGET="${TARGET:-https://docker-image-production-c431.up.railway.app/}"
-# TARGET="${TARGET:-https://www.senso.ai/}"
-POPULATION="${POPULATION:-5}"
+# TARGET="${TARGET:-https://docker-image-production-c431.up.railway.app/}"
+TARGET="${TARGET:-https://www.openrouter.ai/}"
+POPULATION="${POPULATION:-6}"
 GENERATIONS="${GENERATIONS:-5}"
 OUT_DIR="${OUT_DIR:-./out}"
-KUBECONFIG_PATH="${KUBECONFIG:-$REPO_ROOT/k8s-1-36-0-do-0-nyc1-1779544226353-kubeconfig.yaml}"
+KUBECONFIG_PATH="${KUBECONFIG:-$REPO_ROOT/k8s-1-36-0-do-0-syd1-1779919826992-kubeconfig.yaml}"
 BIN="${BIN:-$REPO_ROOT/backend/bin/openzerg}"
 
 # --- pre-flight --------------------------------------------------------------

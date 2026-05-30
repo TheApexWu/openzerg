@@ -18,6 +18,7 @@
             gopls
             go-tools
             kubectl
+            python313
           ];
 
           shellHook = ''

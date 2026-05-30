@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DefaultAttackerImage is the DO registry image the pi-attacker pod runs.
@@ -28,7 +28,7 @@ const DefaultKeysSecretName = "openzerg-keys"
 // DefaultImagePullSecretName is the docker-registry Secret that lets the
 // pod pull from DigitalOcean Container Registry. Created via
 // `doctl registry kubernetes-manifest`.
-const DefaultImagePullSecretName = "registry-openzerg"
+const DefaultImagePullSecretName = "openzerg"
 
 // AttackerNonRootUID matches the `node` user (uid 1000) baked into the
 // pi-attacker base image (node:22-bookworm-slim). Pinning the numeric UID

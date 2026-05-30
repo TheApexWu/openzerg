@@ -10,7 +10,7 @@
 #   - Reads NIMBLE_API_KEY from the env (injected by the openzerg-keys k8s
 #     Secret via envFrom on the pod spec).
 #   - POSTs to https://sdk.nimbleway.com/v1/extract with render=true so JS
-#     SPAs (e.g., Juice Shop on Angular) come back as fully-rendered HTML.
+#     SPAs and JS-heavy apps come back as fully-rendered HTML.
 #   - On success, prints a JSON object with shape:
 #       {"ok":true,"status_code":<int>,"html_len":<int>,"markdown":"<snip>"}
 #     The full HTML is *not* printed (too big for the model context); the

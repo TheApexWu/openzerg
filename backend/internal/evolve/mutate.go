@@ -152,25 +152,24 @@ func genomesInCategory(category string) []attacks.Genome {
 	return matches
 }
 
-// targetPathPoolForCategory returns a small curated list of paths worth
-// trying for each category. Drawn from the seed genomes and a couple of
-// common Juice Shop endpoints not covered by seeds.
+// targetPathPoolForCategory returns a small curated list of common web
+// application paths worth trying for each attack category.
 func targetPathPoolForCategory(category string) []string {
 	switch category {
 	case "injection":
-		return []string{"/rest/user/login", "/rest/products/search", "/api/Users", "/api/Feedbacks"}
+		return []string{"/api/login", "/api/search", "/api/users", "/api/products", "/api/comments"}
 	case "auth":
-		return []string{"/rest/user/login", "/rest/user/whoami", "/api/Users", "/rest/user/reset-password"}
+		return []string{"/api/login", "/api/me", "/api/register", "/api/reset-password", "/api/users"}
 	case "access_control":
-		return []string{"/api/Users/1", "/api/Users/2", "/rest/basket/1", "/rest/basket/2", "/#/administration"}
+		return []string{"/api/users/1", "/api/users/2", "/api/orders/1", "/api/admin", "/admin"}
 	case "xss":
-		return []string{"/#/search", "/api/Feedbacks", "/api/Products/1/reviews", "/#/contact"}
+		return []string{"/search", "/api/comments", "/api/reviews", "/contact", "/api/feedback"}
 	case "data_exposure":
-		return []string{"/ftp", "/ftp/package.json.bak", "/robots.txt", "/#/score-board", "/api/Quantitys"}
+		return []string{"/.env", "/robots.txt", "/api/debug", "/api/config", "/api/health"}
 	case "validation":
-		return []string{"/api/Feedbacks", "/api/Users", "/rest/user/reset-password"}
+		return []string{"/api/contact", "/api/register", "/api/reset-password"}
 	}
-	return []string{"/", "/api/Users", "/rest/products/search"}
+	return []string{"/", "/api/users", "/api/search"}
 }
 
 // PickSurvivors selects up to cap genome-result pairs whose fitness exceeds

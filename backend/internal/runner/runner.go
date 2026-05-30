@@ -399,7 +399,7 @@ func (r *Runner) applyCVESeedHint(population []attacks.Genome) []attacks.Genome 
 	searchContext, cancelSearch := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelSearch()
 	results, err := nimbleClient.SearchWeb(searchContext,
-		"OWASP Juice Shop CVE recent vulnerability",
+		fmt.Sprintf("%s CVE recent web application vulnerability", r.Cfg.TargetURL),
 		nimble.SearchOptions{MaxResults: 3, SearchDepth: "lite"})
 	if err != nil {
 		fmt.Fprintf(r.Stdout, "cve-seed: search failed: %v\n", err)

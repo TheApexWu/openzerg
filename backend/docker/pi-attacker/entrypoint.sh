@@ -183,6 +183,22 @@ pi_exit=${PIPESTATUS[0]}
 set -e
 log "--- pi event stream (end) ---"
 
+pi_error_msg=""
+if [ -s "$pi_stdout_log" ]; then
+  pi_error_msg="$(jq -r 'select(.errorMessage != null) | .errorMessage' "$pi_stdout_log" 2>/dev/null | tail -1)"
+fi
+if [ -n "$pi_error_msg" ]; then
+  log "pi error detected: $pi_error_msg"
+fi
+
+pi_error_msg=""
+if [ -s "$pi_stdout_log" ]; then
+  pi_error_msg="$(jq -r 'select(.errorMessage != null) | .errorMessage' "$pi_stdout_log" 2>/dev/null | tail -1)"
+fi
+if [ -n "$pi_error_msg" ]; then
+  log "pi error detected: $pi_error_msg"
+fi
+
 # Pi runs in `--mode json` so its stdout is a stream of event JSON objects,
 # one per line. The model's final assistant text turn is delivered as a
 # `message_end` (or wrapped inside the terminal `agent_end`) event with the
@@ -223,7 +239,11 @@ fi
 case "$pi_exit" in
   0)
     log "pi exited 0 but no model result line found"
-    emit_result "NOOP" 0.0 "pi finished without emitting a result line"
+    if [ -n "$pi_error_msg" ]; then
+      emit_result "ERROR" 0.0 "pi error: $pi_error_msg"
+    else
+      emit_result "NOOP" 0.0 "pi finished without emitting a result line"
+    fi
     exit 0
     ;;
   124)
@@ -233,7 +253,11 @@ case "$pi_exit" in
     ;;
   *)
     log "pi failed with exit=$pi_exit"
-    emit_result "ERROR" 0.0 "pi exited $pi_exit"
+    if [ -n "$pi_error_msg" ]; then
+      emit_result "ERROR" 0.0 "pi exited $pi_exit: $pi_error_msg"
+    else
+      emit_result "ERROR" 0.0 "pi exited $pi_exit"
+    fi
     exit 2
     ;;
 esac

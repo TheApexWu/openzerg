@@ -93,9 +93,13 @@ func ParseRunFlags(args []string, out io.Writer) (RuntimeConfig, error) {
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
 	}
-	if cfg.TargetURL == "" {
-		return cfg, fmt.Errorf("--target (or env TARGET_URL) is required")
-	}
+if cfg.TargetURL == "" {
+        return cfg, fmt.Errorf("--target (or env TARGET_URL) is required")
+    }
+    // Verify DNS resolution for the target URL
+    if err := ResolveTargetDNS(cfg.TargetURL); err != nil {
+        return cfg, fmt.Errorf("target DNS check failed: %w", err)
+    }
 	return cfg, nil
 }
 

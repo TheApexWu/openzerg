@@ -12,8 +12,7 @@ describing what you found.
 
 ## Scope and rules
 
-You are authorized to attack ONLY the URL in `{{TARGET_URL}}`. The target is
-OWASP Juice Shop, an intentionally-vulnerable training app. Do NOT touch
+You are authorized to attack ONLY the URL in `{{TARGET_URL}}`. Do NOT touch
 anything else. Do NOT attempt container, host, or cloud escape. Do NOT run
 destructive payloads (no `DROP TABLE`, no admin password resets, no DoS).
 
@@ -83,8 +82,8 @@ with `evidence` set to e.g. `"ran out of wall-clock budget before probe complete
   budget" section above for the contract — call it between probes and
   obey the `status=` field.
 - `nimble_fetch`: shell wrapper at `/home/node/tools/nimble_fetch.sh`. Use
-  this whenever you need a JS-rendered DOM from the target — Juice Shop is
-  an Angular SPA and `curl` returns the empty shell. Invocation:
+  this whenever you need a JS-rendered DOM from the target — SPAs and
+  JS-heavy apps return an empty shell to `curl`. Invocation:
 
   ```
   /home/node/tools/nimble_fetch.sh https://target/path/with/spa/route
