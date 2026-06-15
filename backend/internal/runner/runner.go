@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	neturl "net/url"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -66,6 +68,36 @@ func (r *Runner) Run(ctx context.Context) (*store.RunStore, string, string, erro
 	}
 	fmt.Fprintf(r.Stdout, "kube client: ready (in-cluster=%t)\n", cr.InCluster)
 
+	ns := r.Cfg.Namespace
+	if ns == "" {
+		ns = "openzerg"
+	}
+	_, err = k8s.EnsureNamespace(ctx, cr.Clientset, ns)
+	if err != nil {
+		fmt.Fprintf(r.Stderr, "warning: ensure namespace %q: %v\n", ns, err)
+	}
+
+	secCfg, err := secrets.Load(r.EnvFilePath)
+	if err == nil {
+		secData := make(map[string]string)
+		if secCfg.OpenRouterAPIKey != "" {
+			secData["OPENROUTER_API_KEY"] = secCfg.OpenRouterAPIKey
+		}
+		if secCfg.NimbleAPIKey != "" {
+			secData["NIMBLE_API_KEY"] = secCfg.NimbleAPIKey
+		}
+		if len(secData) > 0 {
+			err = k8s.EnsureSecret(ctx, cr.Clientset, ns, "openzerg-keys", secData)
+			if err != nil {
+				fmt.Fprintf(r.Stderr, "warning: ensure openzerg-keys secret: %v\n", err)
+			} else {
+				fmt.Fprintf(r.Stdout, "secret: openzerg-keys is synchronized in namespace %q\n", ns)
+			}
+		}
+	} else {
+		fmt.Fprintf(r.Stderr, "warning: load secrets for k8s sync: %v\n", err)
+	}
+
 	runID := fmt.Sprintf("r%d", time.Now().Unix())
 	runStore := store.NewRunStore(runID, r.Cfg.TargetURL)
 	runStore.NimbleEnabled = !r.Cfg.DisableNimble
@@ -90,6 +122,12 @@ func (r *Runner) Run(ctx context.Context) (*store.RunStore, string, string, erro
 		currentPopulation = r.applyCVESeedHint(currentPopulation)
 	}
 	randomGenerator := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// discoveredPaths accumulates real, same-origin paths that recon (and
+	// other) pods report finding on the target. It is threaded into mutation
+	// so later generations aim at routes that actually exist on THIS site,
+	// keeping the swarm generic instead of guessing fixed API paths.
+	discoveredPaths := newPathSet()
 
 	r.publish("run_start", runID, map[string]any{
 		"target_url":     r.Cfg.TargetURL,
@@ -116,6 +154,7 @@ func (r *Runner) Run(ctx context.Context) (*store.RunStore, string, string, erro
 			return runStore, "", "", fmt.Errorf("runner: generation %d: %w", generationNumber, gerr)
 		}
 		runStore.RecordGeneration(generationNumber, scored)
+		discoveredPaths.addFromScored(scored)
 		r.publishGenerationEnd(runID, generationNumber, scored)
 
 		if runStore.Breach != nil {
@@ -139,7 +178,60 @@ func (r *Runner) Run(ctx context.Context) (*store.RunStore, string, string, erro
 		currentPopulation = r.nextGenerationFromSurvivors(
 			rootContext, openRouterClient, llmBudget,
 			survivors, r.Cfg.Population, r.Cfg.TargetURL, randomGenerator, runID, generationNumber,
+			discoveredPaths.slice(),
 		)
+
+		// Anti-convergence: always reserve ~30% of the next generation for
+		// fresh, diverse seed genomes aimed at under-explored vuln classes (and
+		// discovered paths). Without this the swarm collapses onto whatever
+		// single endpoint scored first (observed: 6 generations all probing
+		// /admin). Diversity keeps other vuln classes in play.
+		diversityReserve := r.Cfg.Population * 3 / 10
+		if diversityReserve < 1 && r.Cfg.Population >= 3 {
+			diversityReserve = 1
+		}
+		currentPopulation = evolve.InjectFreshDiversity(
+			currentPopulation, diversityReserve, discoveredPaths.slice(), randomGenerator,
+		)
+
+		// RECON-DRIVEN SEEDING: replace a slice of the next generation with
+		// attacker genomes aimed at the real endpoints recon discovered, using
+		// the technique most likely to pay off at each path (e.g. an SSRF genome
+		// at a /fetch-url path, GraphQL genomes at /graphql, JWT genomes at an
+		// auth endpoint). This is what makes the swarm act on recon instead of
+		// re-guessing fixed routes — the key generalization fix.
+		//
+		// This MUST be applied LAST and with a GUARANTEED reserve. We previously
+		// saw the LLM mutator over-converge (it bred 7 near-identical CORS
+		// variants from one gen-1 CORS hit) and crowd the recon-seeded JWT
+		// genomes out of the population entirely, so a JWT benchmark whose
+		// /api/auth/login recon found never spawned a JWT vector. Reserving ~40%
+		// of the population for recon seeds — overwriting the tail, which holds
+		// the most-mutated / least-elite entries — guarantees the right vectors
+		// reach the discovered endpoints regardless of LLM behaviour.
+		reconReserve := r.Cfg.Population * 2 / 5 // ~40%
+		reconSeeds := evolve.SeedFromRecon(discoveredPaths.slice(), reconReserve)
+		for i, seed := range reconSeeds {
+			idx := len(currentPopulation) - 1 - i
+			if idx < 0 || idx >= len(currentPopulation) {
+				break
+			}
+			currentPopulation[idx] = seed
+		}
+		if len(reconSeeds) > 0 {
+			// Log the distinct vectors seeded so training triage can confirm the
+			// right classes (e.g. JWT for an auth endpoint) actually made the cut.
+			seededVectors := map[string]struct{}{}
+			for _, s := range reconSeeds {
+				seededVectors[s.Vector] = struct{}{}
+			}
+			vecList := make([]string, 0, len(seededVectors))
+			for v := range seededVectors {
+				vecList = append(vecList, v)
+			}
+			fmt.Fprintf(r.Stdout, "recon-seeding: aimed %d genome(s) at discovered endpoints [vectors: %s]\n",
+				len(reconSeeds), strings.Join(vecList, ","))
+		}
 	}
 
 	if rootContext.Err() != nil {
@@ -226,18 +318,18 @@ func (r *Runner) runOneGeneration(
 	for podIndex, genome := range population {
 		podID := fmt.Sprintf("%s-g%d-p%d", runID, generationNumber, podIndex)
 		pod, perr := spawn.BuildAttackerPod(spawn.AttackerPodOptions{
-			Name:           fmt.Sprintf("openzerg-attacker-%s-g%d-p%d", runID, generationNumber, podIndex),
-			Namespace:      r.Cfg.Namespace,
-			Image:          r.Cfg.AttackerImage,
-			Genome:         genome,
-			RunID:          runID,
-			PodID:          podID,
-			Generation:     generationNumber,
-			TargetURL:      r.Cfg.TargetURL,
-			RateLimitRPS:   r.Cfg.RateLimitRPS,
+			Name:               fmt.Sprintf("openzerg-attacker-%s-g%d-p%d", runID, generationNumber, podIndex),
+			Namespace:          r.Cfg.Namespace,
+			Image:              r.Cfg.AttackerImage,
+			Genome:             genome,
+			RunID:              runID,
+			PodID:              podID,
+			Generation:         generationNumber,
+			TargetURL:          r.Cfg.TargetURL,
+			RateLimitRPS:       r.Cfg.RateLimitRPS,
 			TimeoutSeconds:     r.Cfg.AttackerTimeoutSeconds,     // HARD wrapper budget
 			SoftTimeoutSeconds: r.Cfg.AttackerSoftTimeoutSeconds, // SOFT target the agent aims for
-			DisableNimble:  r.Cfg.DisableNimble,
+			DisableNimble:      r.Cfg.DisableNimble,
 		})
 		if perr != nil {
 			return nil, fmt.Errorf("build pod %d: %w", podIndex, perr)
@@ -293,9 +385,31 @@ func (r *Runner) runOneGeneration(
 			}
 			fmt.Fprintf(r.Stdout, "[gen %d pod %d] %s\n", generationNumber, outcome.Index, string(outcome.Result.RawLine))
 		}
-		fitness := evolve.Score(result)
-		fmt.Fprintf(r.Stdout, "[gen %d pod %d] fitness=%.2f vector=%s status=%s\n",
-			generationNumber, outcome.Index, fitness, genome.Vector, result.Status)
+		fitness := evolve.ScoreWithFlag(result, r.Cfg.ExpectedFlag)
+		flagNote := ""
+		if r.Cfg.ExpectedFlag != "" && evolve.ResultContainsFlag(result, r.Cfg.ExpectedFlag) {
+			// The pod's result actually contains the ground-truth flag — a real
+			// capture. Log it regardless of whether keyword scoring ALSO hit 1.0
+			// (it often does, since the pod self-reports BREACH). The previous
+			// `evolve.Score(result) < 1.0` guard hid genuine captures whenever
+			// the keyword path independently scored 1.0, making the scoreboard
+			// under-report. This is the authoritative success marker.
+			flagNote = " (FLAG CAPTURED)"
+		}
+		// RECON-SURVIVAL FLOOR: a recon pod that actually mapped attack surface
+		// (reported real discovered_paths) is the foundation the rest of the
+		// swarm builds on — it tells later generations WHERE the real endpoints
+		// are. The keyword scorer caps RECON status low and often at 0.0 when the
+		// pod describes the surface in its own words, so such a pod would be
+		// culled and its map lost. Give it a floor just above the survival
+		// threshold so its lineage (and its discovered paths) carries forward.
+		// This is generic: it rewards surface-mapping on ANY target.
+		if fitness < 0.3 && genome.Category == "recon" && evolve.ResultDiscoveredPaths(result) > 0 {
+			fitness = 0.3
+			flagNote += " (recon-floor)"
+		}
+		fmt.Fprintf(r.Stdout, "[gen %d pod %d] fitness=%.2f vector=%s status=%s%s\n",
+			generationNumber, outcome.Index, fitness, genome.Vector, result.Status, flagNote)
 		scored = append(scored, evolve.ScoredGenome{
 			Genome:  genome,
 			Result:  result,
@@ -316,6 +430,7 @@ func (r *Runner) nextGenerationFromSurvivors(
 	random *rand.Rand,
 	runID string,
 	currentGen int,
+	discoveredPaths []string,
 ) []attacks.Genome {
 	if openRouterClient != nil && llmBudget.Remaining > 0 && len(survivors) > 0 {
 		llmCount := populationSize / 2
@@ -332,18 +447,20 @@ func (r *Runner) nextGenerationFromSurvivors(
 			})
 			return evolve.Mutate(evolve.MutationContext{
 				Survivors: survivors, PopulationSize: populationSize, Random: random,
+				DiscoveredPaths: discoveredPaths,
 			})
 		}
 		fmt.Fprintf(r.Stdout, "llm-mutation: produced %d genomes (budget remaining: %d)\n",
 			len(llmGenomes), llmBudget.Remaining)
 		r.publish("mutation", runID, map[string]any{
-			"generation":      currentGen,
-			"source":          "llm",
-			"llm_genomes":     len(llmGenomes),
+			"generation":       currentGen,
+			"source":           "llm",
+			"llm_genomes":      len(llmGenomes),
 			"budget_remaining": llmBudget.Remaining,
 		})
 		remainder := evolve.Mutate(evolve.MutationContext{
 			Survivors: survivors, PopulationSize: populationSize - len(llmGenomes), Random: random,
+			DiscoveredPaths: discoveredPaths,
 		})
 		combined := append(llmGenomes, remainder...)
 		if len(combined) > populationSize {
@@ -357,6 +474,7 @@ func (r *Runner) nextGenerationFromSurvivors(
 	})
 	return evolve.Mutate(evolve.MutationContext{
 		Survivors: survivors, PopulationSize: populationSize, Random: random,
+		DiscoveredPaths: discoveredPaths,
 	})
 }
 
@@ -447,4 +565,83 @@ func (r *Runner) publishGenerationEnd(runID string, generationNumber int, scored
 		"best_fitness": best,
 		"breaches":     breaches,
 	})
+}
+
+// pathSet accumulates unique same-origin paths discovered on the target
+// across generations. It is deliberately generic: it harvests any URL/path
+// strings a pod reports in its result (recon "discovered_paths"/"links"
+// findings, or any raw_finding "url"), normalizes them to a path, and dedupes.
+// These feed evolve.MutationContext.DiscoveredPaths so the swarm explores the
+// target's real routes instead of a fixed guess list.
+type pathSet struct {
+	seen  map[string]struct{}
+	order []string
+}
+
+func newPathSet() *pathSet { return &pathSet{seen: map[string]struct{}{}} }
+
+func (p *pathSet) add(raw string) {
+	path := normalizeToPath(raw)
+	if path == "" {
+		return
+	}
+	if _, ok := p.seen[path]; ok {
+		return
+	}
+	p.seen[path] = struct{}{}
+	p.order = append(p.order, path)
+}
+
+func (p *pathSet) slice() []string {
+	out := make([]string, len(p.order))
+	copy(out, p.order)
+	return out
+}
+
+// addFromScored harvests candidate paths from every result in a generation.
+// It looks at two places: a top-level recon convention where raw_findings
+// entries carry a "discovered_paths" list, and the generic "url" field that
+// every raw_finding may carry. Both are optional and best-effort.
+func (p *pathSet) addFromScored(scored []evolve.ScoredGenome) {
+	for _, sg := range scored {
+		for _, finding := range sg.Result.RawFindings {
+			if u, ok := finding["url"].(string); ok {
+				p.add(u)
+			}
+			if list, ok := finding["discovered_paths"].([]any); ok {
+				for _, item := range list {
+					if s, ok := item.(string); ok {
+						p.add(s)
+					}
+				}
+			}
+			if list, ok := finding["links"].([]any); ok {
+				for _, item := range list {
+					if s, ok := item.(string); ok {
+						p.add(s)
+					}
+				}
+			}
+		}
+	}
+}
+
+// normalizeToPath reduces a raw URL or path string to a clean same-origin
+// path ("/foo/bar"), dropping scheme/host/query/fragment. It returns "" for
+// anything it cannot interpret as a usable path so callers can skip it.
+func normalizeToPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if u, err := neturl.Parse(raw); err == nil && u.Path != "" {
+		return u.Path
+	}
+	if strings.HasPrefix(raw, "/") {
+		if i := strings.IndexAny(raw, "?#"); i >= 0 {
+			raw = raw[:i]
+		}
+		return raw
+	}
+	return ""
 }

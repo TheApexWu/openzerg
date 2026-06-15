@@ -54,3 +54,4 @@ backend/out/
 
 # API keys stored locally — never commit
 hidden-apikeys/
+argus-validation-benchmarks

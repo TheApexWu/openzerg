@@ -68,8 +68,13 @@ POD_ID="${POD_ID:-unknown}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-600}"
 SOFT_TIMEOUT_SECONDS="${SOFT_TIMEOUT_SECONDS:-60}"
 RATE_LIMIT_RPS="${RATE_LIMIT_RPS:-10}"
-PI_MODEL="${PI_MODEL:-qwen/qwen3.6-plus}"
-PI_PROVIDER="${PI_PROVIDER:-openrouter}"
+PI_MODEL="${PI_MODEL:-qwen/qwen3.7-plus}"
+# Default to the custom "orcap" provider (extensions/orcap.ts): same OpenRouter
+# endpoint + key, but with an ENFORCED maxTokens=8192 that pi actually sends on
+# the wire. The built-in "openrouter" provider sends max_tokens=65536 regardless
+# of config, which 402s on a thin balance. Override PI_PROVIDER=openrouter to
+# use the stock provider.
+PI_PROVIDER="${PI_PROVIDER:-orcap}"
 
 # Pull vector/category out of the GENOME JSON so the result line can echo
 # them. Failing to parse the genome is an ERROR-class infra failure.
@@ -118,6 +123,27 @@ export START_EPOCH_MS DEADLINE_EPOCH_MS SOFT_DEADLINE_EPOCH_MS \
        TIMEOUT_SECONDS SOFT_TIMEOUT_SECONDS
 
 log "starting attacker pod (vector=$VECTOR target=$TARGET_URL model=$PI_MODEL soft=${SOFT_TIMEOUT_SECONDS}s hard=${TIMEOUT_SECONDS}s)"
+
+# Start the in-pod max_tokens clamp proxy when using the orcap provider. pi
+# hard-sends max_tokens=65536, which OpenRouter rejects with HTTP 402 on a thin
+# balance; the proxy rewrites it down to MAXTOK_CAP (default 8192) before
+# forwarding to openrouter.ai. orcap.ts points pi at 127.0.0.1:8799.
+if [ "$PI_PROVIDER" = "orcap" ]; then
+  export MAXTOK_PROXY_PORT="${MAXTOK_PROXY_PORT:-8799}"
+  # 16384 = qwen3.7-plus native max-out. 8192 was too tight: qwen burns output
+  # budget on reasoning + tool calls and ran out before emitting the final JSON
+  # result line ("pi finished without emitting a result line"). 16k still clears
+  # OpenRouter's pre-flight on the thin balance (a 16k request bills ~$0.0024).
+  export MAXTOK_CAP="${MAXTOK_CAP:-16384}"
+  node /home/node/tools/maxtokens_proxy.js &
+  MAXTOK_PROXY_PID=$!
+  # Give it a moment to bind, then sanity-check it's listening.
+  for _i in 1 2 3 4 5 10; do
+    if curl -sS -o /dev/null -m 1 "http://127.0.0.1:${MAXTOK_PROXY_PORT}/" 2>/dev/null; then break; fi
+    sleep 0.3
+  done
+  log "maxtokens proxy started (pid=$MAXTOK_PROXY_PID port=${MAXTOK_PROXY_PORT} cap=${MAXTOK_CAP})"
+fi
 
 # Render the user prompt from the template by substituting placeholders.
 # Pi takes the prompt as a positional argument; the system prompt lives in
@@ -217,17 +243,37 @@ jq -r '
     ( .messages? // [] | map(.content? // [] | map(select(.type=="text") | .text)[]?)[]? )
   ' "$pi_stdout_log" 2>/dev/null > "$extracted_text" || true
 
-# Scan extracted text from the bottom for a line that itself starts with a
-# `{"type":"result", ...}` JSON object. `grep` exits 1 with no match; the
-# explicit if-form keeps `set -e` from killing the script in that case.
+# Scan the extracted assistant text for EVERY line that is itself a
+# `{"type":"result", ...}` JSON object, then choose the BEST one rather than
+# just the last. The agent sometimes emits several result lines as it refines
+# a finding (and may end its turn on a tool call, leaving a weak/again-partial
+# line last, or no clean line at the very end). Picking by status priority
+# means a confirmed finding earlier in the stream is never lost to later
+# noise. Priority: BREACH > PARTIAL > RECON > NOOP > ERROR; ties break toward
+# the later occurrence (more refined).
 if [ -s "$extracted_text" ]; then
-  candidate=""
-  if tac "$extracted_text" | grep -m 1 -E '^\{"type":[[:space:]]*"result"' > /tmp/pi-candidate.tmp; then
-    candidate="$(cat /tmp/pi-candidate.tmp)"
-  fi
-  if [ -n "$candidate" ] && printf '%s' "$candidate" | jq -e . >/dev/null 2>&1; then
-    final_line="$candidate"
-  fi
+  best_rank=-1
+  # Pull candidate result lines (those starting with {"type":"result").
+  grep -E '^\{"type":[[:space:]]*"result"' "$extracted_text" > /tmp/pi-result-lines.txt 2>/dev/null || true
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    # Must be valid JSON.
+    printf '%s' "$line" | jq -e . >/dev/null 2>&1 || continue
+    status="$(printf '%s' "$line" | jq -r '.status // "" | ascii_upcase' 2>/dev/null)"
+    case "$status" in
+      BREACH)  rank=5 ;;
+      PARTIAL) rank=4 ;;
+      RECON)   rank=3 ;;
+      NOOP)    rank=2 ;;
+      ERROR)   rank=1 ;;
+      *)       rank=0 ;;
+    esac
+    # >= so that on equal rank we keep the later (more refined) line.
+    if [ "$rank" -ge "$best_rank" ]; then
+      best_rank="$rank"
+      final_line="$line"
+    fi
+  done < /tmp/pi-result-lines.txt
 fi
 
 if [ -n "$final_line" ]; then

@@ -1,9 +1,14 @@
 {
-  "//": "Pi model registry overrides for the OpenZerg attacker pod. The qwen/qwen3.6-plus model upstream (Alibaba) rejects requests whose system message is sent with the newer OpenAI 'developer' role, returning HTTP 400 'developer is not one of [system, assistant, user, tool, function]'. Pi's built-in compat block for this model leaves supportsDeveloperRole unset (defaulting to true), so we force it to false here. Update or remove this file if/when Pi's bundled definition for qwen/qwen3.6-plus learns the right default.",
+  "//": "Pi model registry overrides for the OpenZerg attacker pod. The qwen/qwen3.7-plus model upstream (Alibaba) rejects requests whose system message is sent with the newer OpenAI 'developer' role, returning HTTP 400 'developer is not one of [system, assistant, user, tool, function]'. We define it as a custom model here so supportsDeveloperRole=false is respected.",
   "providers": {
     "openrouter": {
+      "compat": {
+        "supportsDeveloperRole": false
+      },
+      "//modelOverrides": "qwen/qwen3.7-plus is a BUILT-IN OpenRouter model, so per-model tweaks go under modelOverrides (not models, which is for NEW models). maxTokens caps the output-token request: pi otherwise asks for up to 65536, which OpenRouter rejects with HTTP 402 when the affordable amount is lower (killing every probe) and is wasteful. 8192 fits a tight credit budget and cuts per-pod cost ~8x. supportsDeveloperRole=false keeps the Alibaba 400 fix.",
       "modelOverrides": {
-        "qwen/qwen3.6-plus": {
+        "qwen/qwen3.7-plus": {
+          "maxTokens": 8192,
           "compat": {
             "supportsDeveloperRole": false
           }

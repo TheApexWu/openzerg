@@ -12,10 +12,19 @@ Use your `openzerg-attacker` skill. Do exactly ONE focused probe. Aim
 for ~60 seconds of work — you have a soft target and a hard kill at
 10 minutes (see the "Wall-clock budget" section of the skill). Check
 the clock between probes with the bundled `time_check.sh` helper and
-wrap up early if it goes WARN/EXPIRING. When done, print exactly one
-final JSON line in the shape the skill specifies (starting with
-`{"type":"result"` and ending with a closing brace), with no
-surrounding text or markdown.
+wrap up early if it goes WARN/EXPIRING.
+
+STOP AS SOON AS YOU HAVE EVIDENCE. The moment you have confirmed (or
+clearly failed to confirm) the vulnerability, print your single final
+JSON result line and STOP. Do NOT keep re-probing to perfect an exploit
+or work out exact escaping — one solid PARTIAL/BREACH is the goal, not a
+weaponised payload. Repeated probing burns your budget and risks the run
+ending before your result line is emitted. A confirmed reflection,
+delay, or accepted operator is enough; report it and finish.
+
+When done, print exactly one final JSON line in the shape the skill
+specifies (starting with `{"type":"result"` and ending with a closing
+brace), with no surrounding text or markdown.
 
 If `requires_nimble` above is `true` you MUST call
 `/home/node/tools/nimble_fetch.sh {{TARGET_URL}}{{TARGET_PATH}}` at least

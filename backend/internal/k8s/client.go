@@ -47,6 +47,10 @@ func BuildClientset(kubeconfigPath string) (*ClientResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Configure client-side rate limits to prevent client-side throttling.
+	cfg.QPS = 100
+	cfg.Burst = 150
+
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: NewForConfig: %w", err)

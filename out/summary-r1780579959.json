@@ -1,0 +1,1814 @@
+{
+  "run_id": "r1780579959",
+  "target_url": "https://ginandjuice.shop/",
+  "started_at": "2026-06-04T13:32:39Z",
+  "finished_at": "2026-06-04T14:04:07Z",
+  "duration_s": 1888.154652675,
+  "generations_run": 5,
+  "total_pods": 50,
+  "outcome": "EXHAUSTED",
+  "best_fitness": 0.9,
+  "breach": null,
+  "per_generation": [
+    {
+      "generation": 1,
+      "population": 10,
+      "survivors": 0,
+      "best_fitness": 0.1,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/api/login",
+            "params": {
+              "password": "x",
+              "username_payload": "' OR 1=1--"
+            },
+            "hint": "Try auth bypass via SQL tautology in login form."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "oz-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "PARTIAL",
+            "fitness": 0.3,
+            "evidence": "payload reflected unescaped in JS context, but login failed with Invalid username or password",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "var username = 'admin' OR 1=1--';",
+                "status_code": 200,
+                "url": "https://ginandjuice.shop/login"
+              }
+            ],
+            "duration_ms": 133844,
+            "t": 1717508000000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g1-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_search",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/api/search",
+            "params": {
+              "q_payload": "' UNION SELECT 1,2,3--"
+            },
+            "hint": "Try UNION-based info leak via search parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "sqli_search",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404; target_path /api/search does not exist on target",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/search"
+              }
+            ],
+            "duration_ms": 235851,
+            "t": 1749046000000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g1-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/search",
+            "params": {
+              "q": "\u003cscript\u003ealert(1)\u003c/script\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1780579959",
+            "pod_id": "r1780579959-g1-p2",
+            "generation": 1,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 600s",
+            "raw_findings": [],
+            "duration_ms": 607000,
+            "t": 1780580568404
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g1-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/users/1",
+            "params": {},
+            "hint": "Try fetching user record by ID without auth."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_1",
+            "pod_id": "pod_1",
+            "generation": 1,
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint not found; 404 returned for /api/users/1",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found HTML response",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/1"
+              }
+            ],
+            "duration_ms": 30000,
+            "t": 1780580009431
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g1-p3"
+        },
+        {
+          "Genome": {
+            "vector": "bola_resource_enum",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/orders/1",
+            "params": {},
+            "hint": "Try enumerating resources by sequential ID."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-attacker-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "bola_resource_enum",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "Endpoint /api/orders/1 returned 404 Not Found. No BOLA vulnerability observed within soft timeout window.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found returned for /api/orders/1, /api/orders/2, /api/orders/3",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/orders/1"
+              }
+            ],
+            "duration_ms": 116000,
+            "t": 1780580089834
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g1-p4"
+        },
+        {
+          "Genome": {
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "technique": "jwt_swap",
+            "target_path": "/api/me",
+            "params": {
+              "forge_alg": "none"
+            },
+            "hint": "Forge a JWT with alg=none claiming admin privileges."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint does not exist; target returned 404 for /api/me, preventing jwt alg none test",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "HTTP/2 404, oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/me"
+              }
+            ],
+            "duration_ms": 182957,
+            "t": 1717508096000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g1-p5"
+        },
+        {
+          "Genome": {
+            "vector": "path_traversal",
+            "category": "data_exposure",
+            "technique": "dotdot",
+            "target_path": "/api/files",
+            "params": {
+              "file": "../../../etc/passwd"
+            },
+            "hint": "Try directory traversal to read sensitive files."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_001",
+            "pod_id": "pod_001",
+            "generation": 1,
+            "vector": "path_traversal",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 returned for path traversal attempts on /api/files with payloads like ../../../etc/passwd",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found HTML page returned",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/files?path=../../../etc/passwd"
+              }
+            ],
+            "duration_ms": 50000,
+            "t": 1717508010000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g1-p6"
+        },
+        {
+          "Genome": {
+            "vector": "data_exposure_env",
+            "category": "data_exposure",
+            "technique": "direct_get",
+            "target_path": "/.env",
+            "params": {},
+            "hint": "Direct fetch of .env file for leaked secrets."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_1",
+            "pod_id": "pod_1",
+            "generation": 1,
+            "vector": "data_exposure_env",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 not found for /.env",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/.env"
+              }
+            ],
+            "duration_ms": 36000,
+            "t": 1717507995000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g1-p7"
+        },
+        {
+          "Genome": {
+            "vector": "data_exposure_robots",
+            "category": "data_exposure",
+            "technique": "direct_get",
+            "target_path": "/robots.txt",
+            "params": {},
+            "hint": "Read robots.txt for disallowed paths."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-attacker-run",
+            "pod_id": "pod-001",
+            "generation": 1,
+            "vector": "data_exposure_robots",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "robots.txt returned 404 not found, no data exposure",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found page returned",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/robots.txt"
+              }
+            ],
+            "duration_ms": 126000,
+            "t": 1780580103478
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g1-p8"
+        },
+        {
+          "Genome": {
+            "vector": "admin_panel",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "Try to reach admin panel directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "dummy",
+            "pod_id": "dummy",
+            "generation": 0,
+            "vector": "admin_panel",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0.1,
+            "evidence": "blocked: 403 Access denied when attempting to reach admin panel directly.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 65000,
+            "t": 1717508820
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g1-p9"
+        }
+      ]
+    },
+    {
+      "generation": 2,
+      "population": 10,
+      "survivors": 2,
+      "best_fitness": 0.4,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "sqli_login",
+            "category": "injection",
+            "technique": "tautology",
+            "target_path": "/api/login",
+            "params": {
+              "password": "x",
+              "username_payload": "' OR 1=1--"
+            },
+            "hint": "Try auth bypass via SQL tautology in login form."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 1,
+            "vector": "sqli_login",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 not found for /api/login endpoint, html login form exists at /login but no matching sqli surface found at target path",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "404 not found; missing HTML page returned",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/login"
+              }
+            ],
+            "duration_ms": 72000,
+            "t": 1733400000000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g2-p0"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_search",
+            "category": "injection",
+            "technique": "union_select",
+            "target_path": "/api/search",
+            "params": {
+              "q_payload": "' UNION SELECT 1,2,3--"
+            },
+            "hint": "Try UNION-based info leak via search parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "sqli_search",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "target_path /api/search returned 404 Not Found. Unable to probe for sqli_search vector.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/search?q=test"
+              }
+            ],
+            "duration_ms": 68676,
+            "t": 1780580660841
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g2-p1"
+        },
+        {
+          "Genome": {
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "technique": "reflected",
+            "target_path": "/search",
+            "params": {
+              "q": "\u003cscript\u003ealert(1)\u003c/script\u003e"
+            },
+            "hint": "Try reflected XSS via search query parameter."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1780579959",
+            "pod_id": "r1780579959-g2-p2",
+            "generation": 2,
+            "vector": "xss_search_reflected",
+            "category": "xss",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "pi timed out after 600s",
+            "raw_findings": [],
+            "duration_ms": 608000,
+            "t": 1780581185101
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g2-p2"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/users/1",
+            "params": {},
+            "hint": "Try fetching user record by ID without auth."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-attacker-probe",
+            "pod_id": "openzerg-attacker-pod-1",
+            "generation": 1,
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.3,
+            "evidence": "endpoint exists, 401/403/404 returned without auth",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found on /api/users/1 without auth",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/1"
+              },
+              {
+                "method": "GET",
+                "snippet": "404 Not Found on /api/user/1 without auth",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/user/1"
+              },
+              {
+                "method": "GET",
+                "snippet": "404 Not Found on /users/1 without auth",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/users/1"
+              }
+            ],
+            "duration_ms": 41458,
+            "t": 1717508611000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g2-p3"
+        },
+        {
+          "Genome": {
+            "vector": "bola_resource_enum",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/orders/1",
+            "params": {},
+            "hint": "Try enumerating resources by sequential ID."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "$RUN_ID",
+            "pod_id": "$POD_ID",
+            "generation": 1,
+            "vector": "bola_resource_enum",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0.1,
+            "evidence": "Target path /api/orders/1 returned 404 Not Found with generic HTML, no evidence of sequential enumeration vulnerability.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/orders/1"
+              }
+            ],
+            "duration_ms": 74165,
+            "t": 1686316432000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g2-p4"
+        },
+        {
+          "Genome": {
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "technique": "jwt_swap",
+            "target_path": "/api/me",
+            "params": {
+              "forge_alg": "none"
+            },
+            "hint": "Forge a JWT with alg=none claiming admin privileges."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "jwt_alg_none_run",
+            "pod_id": "pod_0",
+            "generation": 1,
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 on /api/me",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "returned 404 html page with missing route",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/me"
+              }
+            ],
+            "duration_ms": 8000,
+            "t": 1717510000000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g2-p5"
+        },
+        {
+          "Genome": {
+            "vector": "path_traversal",
+            "category": "data_exposure",
+            "technique": "dotdot",
+            "target_path": "/api/files",
+            "params": {
+              "file": "../../../etc/passwd"
+            },
+            "hint": "Try directory traversal to read sensitive files."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-run-1",
+            "pod_id": "attacker-pod-1",
+            "generation": 1,
+            "vector": "path_traversal",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint /api/files returned 404; no path traversal vector available on this target path",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found response for /api/files endpoint",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/files"
+              }
+            ],
+            "duration_ms": 70000,
+            "t": 1717508628000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g2-p6"
+        },
+        {
+          "Genome": {
+            "vector": "data_exposure_env",
+            "category": "data_exposure",
+            "technique": "direct_get",
+            "target_path": "/.env",
+            "params": {},
+            "hint": "Direct fetch of .env file for leaked secrets."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "req-001",
+            "pod_id": "pod-001",
+            "generation": 1,
+            "vector": "data_exposure_env",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 not found",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "HTTP/2 404 - \u003c!DOCTYPE html\u003e\u003chtml\u003e...\u003ch2\u003eoops... something went wrong!\u003c/h2\u003e",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/.env"
+              }
+            ],
+            "duration_ms": 40769,
+            "t": 1717508608769
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g2-p7"
+        },
+        {
+          "Genome": {
+            "vector": "data_exposure_robots",
+            "category": "data_exposure",
+            "technique": "direct_get",
+            "target_path": "/robots.txt",
+            "params": {},
+            "hint": "Read robots.txt for disallowed paths."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "data_exposure_robots",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "robots.txt endpoint returned 404 Not Found",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "HTTP/2 404 - 404 Not Found page",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/robots.txt"
+              }
+            ],
+            "duration_ms": 31176,
+            "t": 1780580634195
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g2-p8"
+        },
+        {
+          "Genome": {
+            "vector": "admin_panel",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "Try to reach admin panel directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run1",
+            "pod_id": "pod1",
+            "generation": 1,
+            "vector": "admin_panel",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.1,
+            "evidence": "endpoint exists, 403 returned on /admin",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 98000,
+            "t": 1780580710000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g2-p9"
+        }
+      ]
+    },
+    {
+      "generation": 3,
+      "population": 10,
+      "survivors": 1,
+      "best_fitness": 0.4,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "bola_user_by_uuid",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/users/v1/profile/uuid",
+            "params": {
+              "uuid": "00000000-0000-0000-0000-000000000000"
+            },
+            "hint": "Attempt to bypass ID checks using UUID format instead of integer."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_001",
+            "pod_id": "pod_001",
+            "generation": 1,
+            "vector": "bola_user_by_uuid",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0.1,
+            "evidence": "endpoint returned 404 Not Found (HTML page) for various UUID and integer formats, suggesting it does not exist or is inaccessible.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "HTTP/2 404 content-type: text/html; charset=utf-8",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/v1/profile/00000000-0000-0000-0000-000000000000"
+              }
+            ],
+            "duration_ms": 161582,
+            "t": 1780581412726
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g3-p0"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "Probe for administrative API endpoints behind the main admin path.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "zerg-001",
+            "pod_id": "pod-attacker-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.2,
+            "evidence": "endpoint exists, 403 returned. /admin/api/v1/config and /admin/config return 403 Access denied, while /api/v1/admin/config returns 404",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 page returned via nimble_fetch",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop//api/v1/admin/config",
+                "used_nimble": true
+              },
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin/api/v1/config"
+              }
+            ],
+            "duration_ms": 15000,
+            "t": 1717509000000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g3-p1"
+        },
+        {
+          "Genome": {
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "technique": "token_manipulation",
+            "target_path": "/api/auth/verify",
+            "params": {
+              "header": {
+                "alg": "none"
+              }
+            },
+            "hint": "Test if the backend accepts JWTs with the 'none' algorithm."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "jwt_alg_none",
+            "category": "auth",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/auth/verify"
+              }
+            ],
+            "duration_ms": 86394,
+            "t": 1780581322904
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g3-p2"
+        },
+        {
+          "Genome": {
+            "vector": "sqli_user_lookup",
+            "category": "injection",
+            "technique": "sql_injection",
+            "target_path": "/api/users/search",
+            "params": {
+              "username": "' OR 1=1--"
+            },
+            "hint": "Inject SQL syntax into the user search parameter to bypass filters."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "sqli_user_lookup",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 not found on target path /api/users/search",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found, 404",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/search"
+              }
+            ],
+            "duration_ms": 5000,
+            "t": 1717510600000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g3-p3"
+        },
+        {
+          "Genome": {
+            "vector": "sensitive_data_leak",
+            "category": "data_exposure",
+            "technique": "path_traversal",
+            "target_path": "/api/users/export",
+            "params": {
+              "file": "../../../etc/passwd"
+            },
+            "hint": "Check if the user export functionality allows directory traversal."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 0,
+            "vector": "sensitive_data_leak",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found, missing page",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/export"
+              }
+            ],
+            "duration_ms": 25000,
+            "t": 1717509300000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g3-p4"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/users/1",
+            "params": {},
+            "hint": "Try fetching user record by ID without auth."
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint returns 404, not found",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/1"
+              }
+            ],
+            "duration_ms": 47000,
+            "t": 1717509269000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g3-p5"
+        },
+        {
+          "Genome": {
+            "vector": "admin_panel",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "Try to reach admin panel directly.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run-001",
+            "pod_id": "pod-001",
+            "generation": 1,
+            "vector": "admin_panel",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 403",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 5000,
+            "t": 1749045300000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g3-p6"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id_x_admin_panel",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/users/1",
+            "params": {},
+            "hint": "cross-breed: bola_user_by_id params with admin_panel technique",
+            "parent_pod_id": "bola_user_by_id+admin_panel"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-run-001",
+            "pod_id": "pod-attacker-001",
+            "generation": 1,
+            "vector": "bola_user_by_id_x_admin_panel",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.1,
+            "evidence": "endpoint returned 404 not found, path may not exist or requires different routing",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/users/1"
+              }
+            ],
+            "duration_ms": 50000,
+            "t": 1717509247000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g3-p7"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/admin",
+            "params": {},
+            "hint": "vary-path: /api/admin",
+            "parent_pod_id": "bola_user_by_id"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint returned 404 or access denied; no BOLA confirmed",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/admin"
+              }
+            ],
+            "duration_ms": 93058,
+            "t": 1717509258000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g3-p8"
+        },
+        {
+          "Genome": {
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/orders/1",
+            "params": {},
+            "hint": "vary-path: /api/orders/1",
+            "parent_pod_id": "bola_user_by_id"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "bola_user_by_id",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint /api/orders/1 returned 404, no BOLA possible",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/orders/1"
+              }
+            ],
+            "duration_ms": 80104,
+            "t": 1780581320466
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g3-p9"
+        }
+      ]
+    },
+    {
+      "generation": 4,
+      "population": 10,
+      "survivors": 3,
+      "best_fitness": 0.9,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v2/admin/settings",
+            "params": {},
+            "hint": "Test for versioned API administrative endpoints.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_001",
+            "pod_id": "pod_001",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0.1,
+            "evidence": "Endpoint exists but returns 404 not found; 404 returned",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v2/admin/settings",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 47420,
+            "t": 1717508313000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g4-p0"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "auth",
+            "technique": "credential_stuffing",
+            "target_path": "/api/v1/admin/login",
+            "params": {
+              "pass": "admin",
+              "user": "admin"
+            },
+            "hint": "Attempt default administrative credentials on the identified API login path.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "auth",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint returns 404 not found",
+            "raw_findings": [
+              {
+                "method": "POST",
+                "snippet": "404 Not Found - PortSwigger Gin \u0026 Juice Shop page",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/login",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 15000,
+            "t": 1717509524000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g4-p1"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "data_exposure",
+            "technique": "parameter_tampering",
+            "target_path": "/api/v1/admin/config",
+            "params": {
+              "debug": "true",
+              "export": "all"
+            },
+            "hint": "Inject debugging parameters to force verbose configuration leakage.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "data_exposure",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 not found on /api/v1/admin/config with debug parameters",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 197436,
+            "t": 1717519176000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g4-p2"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "injection",
+            "technique": "nosql_injection",
+            "target_path": "/api/v1/admin/config",
+            "params": {
+              "filter": {
+                "$ne": null
+              }
+            },
+            "hint": "Use NoSQL operators to bypass configuration filters.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "injection",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404; endpoint /api/v1/admin/config returns 404 Not Found; no NoSQL operator injection surface available.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 132000,
+            "t": 1717510800000
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g4-p3"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "validation",
+            "technique": "mass_assignment",
+            "target_path": "/api/v1/admin/config",
+            "params": {
+              "permissions": [
+                "*"
+              ],
+              "role": "superuser"
+            },
+            "hint": "Attempt to escalate privileges by injecting unauthorized fields into the config update payload.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "${RUN_ID:-unknown}",
+            "pod_id": "${POD_ID:-unknown}",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "validation",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "Endpoint /api/v1/admin/config returned 404 Not Found. Target does not expose this admin API route for privilege escalation probe.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop//api/v1/admin/config",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 54000,
+            "t": 1717509519000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g4-p4"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "Probe for administrative API endpoints behind the main admin path.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 0,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.3,
+            "evidence": "Endpoint /api/v1/admin/config returned 404, but /admin/config returned 403 Access denied, indicating protected admin resources exist behind the main admin path.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "This is a deliberately vulnerable web application...",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config",
+                "used_nimble": true
+              },
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin/config"
+              }
+            ],
+            "duration_ms": 146000,
+            "t": 1780581620221
+          },
+          "Fitness": 0.9,
+          "PodID": "r1780579959-g4-p5"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "vary-path: /admin",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "zerg-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.2,
+            "evidence": "endpoint exists, 403 returned",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin"
+              }
+            ],
+            "duration_ms": 35000,
+            "t": 1717510730000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g4-p6"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "swap-technique: Try fetching user record by ID without auth.",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-run-1",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint not found, 404 returned for /api/v1/admin/config and user ID variants",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config"
+              }
+            ],
+            "duration_ms": 57243,
+            "t": 1749045544000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g4-p7"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "swap-technique: Try enumerating resources by sequential ID.",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_001",
+            "pod_id": "pod_001",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.2,
+            "evidence": "endpoints enumerated: /api/v1/admin/config returned 404, /admin/config returned 403 Access denied. sequential ID probing on /admin/config/ID yielded 403",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config"
+              },
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin/config"
+              }
+            ],
+            "duration_ms": 113567,
+            "t": 1717510779567
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g4-p8"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "swap-technique: Try fetching user record by ID without auth.",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-run",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "target endpoint /api/v1/admin/config returned 404 Not Found; no evidence of access control bypass or user record retrieval without auth",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/config"
+              }
+            ],
+            "duration_ms": 102247,
+            "t": 1717509572000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g4-p9"
+        }
+      ]
+    },
+    {
+      "generation": 5,
+      "population": 10,
+      "survivors": 3,
+      "best_fitness": 0.4,
+      "breaches": 0,
+      "per_pod": [
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/debug",
+            "params": {},
+            "hint": "Probe for administrative debug endpoints within the v1 API namespace.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_1",
+            "pod_id": "pod_1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint does not exist; 404 returned on /api/v1/admin/debug",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "oops... something went wrong! 404 not found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/debug",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 79367,
+            "t": 1717509760000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p0"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v3/admin/users",
+            "params": {},
+            "hint": "Test for potential future versioning of administrative user management endpoints.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 0,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "target path /api/v3/admin/users returned 404; endpoint does not exist or is not exposed",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v3/admin/users",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 59000,
+            "t": 1780581789555
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p1"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/backup",
+            "params": {},
+            "hint": "Search for administrative backup or export functions.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "openzerg-ginandjuice-1",
+            "pod_id": "attacker-pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint /api/v1/admin/backup returned 404 Not Found",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found - oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/backup",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 46925,
+            "t": 1780581784894
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p2"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin/api/v1/config",
+            "params": {},
+            "hint": "Test for nested administrative API paths under the primary admin directory.",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run-001",
+            "pod_id": "pod-001",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0,
+            "evidence": "endpoint exists, 403 returned for /admin/api/v1/config",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin/api/v1/config"
+              }
+            ],
+            "duration_ms": 90706,
+            "t": 1717513400000
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g5-p3"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/logs",
+            "params": {},
+            "hint": "Probe for administrative logging endpoints that may leak system metadata.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "unknown",
+            "pod_id": "unknown",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint does not exist, 404 returned for /api/v1/admin/logs and variations",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "oops... something went wrong! Of all the gin joints in all the websites in all the internet, you stumble into mine.",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v1/admin/logs",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 75746,
+            "t": 1717505800000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p4"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v1/admin/config",
+            "params": {},
+            "hint": "Probe for administrative API endpoints behind the main admin path.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "",
+            "pod_id": "",
+            "generation": 0,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "failed",
+            "fitness": 0,
+            "evidence": "",
+            "raw_findings": [
+              {
+                "details": "Target path /api/v1/admin/config returned 404 Not Found",
+                "type": "http_status",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 0,
+            "t": 0
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p5"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v2/admin/settings",
+            "params": {},
+            "hint": "Test for versioned API administrative endpoints.",
+            "requires_nimble": true
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run_1",
+            "pod_id": "pod_1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "endpoint returned 404 not found",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "oops... something went wrong!",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v2/admin/settings",
+                "used_nimble": true
+              }
+            ],
+            "duration_ms": 66103,
+            "t": 1717500000000
+          },
+          "Fitness": 0,
+          "PodID": "r1780579959-g5-p6"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "vary-path: /admin",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "default_run",
+            "pod_id": "pod-1",
+            "generation": 1,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "RECON",
+            "fitness": 0.1,
+            "evidence": "endpoint exists, 403 returned for /admin",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin"
+              }
+            ],
+            "duration_ms": 41051,
+            "t": 1717511351051
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g5-p7"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "id_enumeration",
+            "target_path": "/admin",
+            "params": {},
+            "hint": "swap-technique: Try fetching user record by ID without auth.",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "run-f278a6ece8a24a0bbf0c7f697a6d4e0d",
+            "pod_id": "pod-0a3d7b0f9b1643a6b53821c07889c4d8",
+            "generation": 0,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 403 on /admin, endpoint exists but returned 403",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "Access denied",
+                "status_code": 403,
+                "url": "https://ginandjuice.shop/admin"
+              }
+            ],
+            "duration_ms": 86526,
+            "t": 1780581820815
+          },
+          "Fitness": 0.4,
+          "PodID": "r1780579959-g5-p8"
+        },
+        {
+          "Genome": {
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "technique": "force_browse",
+            "target_path": "/api/v2/admin/settings",
+            "params": {},
+            "hint": "shuffle-params",
+            "parent_pod_id": "admin_api_endpoint"
+          },
+          "Result": {
+            "type": "result",
+            "run_id": "r1780579959",
+            "pod_id": "r1780579959-g5-p9",
+            "generation": 5,
+            "vector": "admin_api_endpoint",
+            "category": "access_control",
+            "status": "NOOP",
+            "fitness": 0,
+            "evidence": "blocked: 404 Not Found returned for /api/v2/admin/settings and variants; endpoint does not exist or is completely blocked.",
+            "raw_findings": [
+              {
+                "method": "GET",
+                "snippet": "404 Not Found",
+                "status_code": 404,
+                "url": "https://ginandjuice.shop/api/v2/admin/settings"
+              }
+            ],
+            "duration_ms": 80062,
+            "t": 1780581815660
+          },
+          "Fitness": 0.1,
+          "PodID": "r1780579959-g5-p9"
+        }
+      ]
+    }
+  ],
+  "narrative_md_path": "out/summary-r1780579959.md"
+}

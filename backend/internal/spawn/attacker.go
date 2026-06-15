@@ -210,6 +210,18 @@ func BuildAttackerPod(opts AttackerPodOptions) (*corev1.Pod, error) {
 				Env:     containerEnv,
 				EnvFrom: containerEnvFrom,
 				Resources: corev1.ResourceRequirements{
+					// The attacker is I/O-bound (waiting on HTTP + the LLM API),
+					// not CPU-bound, so we set a small REQUEST (for scheduling
+					// density — many pods pack onto each node) and a higher LIMIT
+					// (burst headroom). Without an explicit request, k8s defaults
+					// request=limit (500m), which caps a 2-vCPU node at ~3 pods
+					// and starves a population of 10+ behind Pending. 100m request
+					// lets ~15 pack per node while the 500m limit prevents any one
+					// pod from hogging CPU.
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
 						corev1.ResourceMemory: resource.MustParse("512Mi"),

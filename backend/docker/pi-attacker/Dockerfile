@@ -43,6 +43,17 @@ USER node
 # for the override and full context.
 COPY --chown=node:node pi-config/models.json /home/node/.pi/agent/models.json
 
+# Pi global settings (defaultThinkingLevel=off to stop qwen reasoning-token
+# waste, quietStartup, defaultProjectTrust=never for non-interactive json mode).
+COPY --chown=node:node pi-config/settings.json /home/node/.pi/agent/settings.json
+
+# pi extensions (auto-discovered from ~/.pi/agent/extensions/*.ts). orcap.ts
+# registers an OpenRouter provider whose model maxTokens is actually SENT on the
+# wire (the models.json override only changes the display), so probes don't blow
+# past the account's affordable token budget and 402. The entrypoint selects it
+# with --provider orcap.
+COPY --chown=node:node extensions /home/node/.pi/agent/extensions
+
 # Prompt templates (system prompt + user prompt scaffold). The entrypoint
 # renders these with the per-pod TARGET_URL / GENOME values.
 COPY --chown=node:node prompts /home/node/prompts

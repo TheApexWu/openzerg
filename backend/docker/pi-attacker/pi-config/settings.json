@@ -1,0 +1,6 @@
+{
+  "//": "Pi global settings for the OpenZerg attacker pod (baked to ~/.pi/agent/settings.json). defaultThinkingLevel=off stops qwen3.7-plus from spending output tokens on reasoning we don't need for a short black-box probe — it was leaking ~870 reasoning tokens/call even with reasoning:false, inflating cost (~$0.80/benchmark) and risking running out of the output budget before the final JSON result line. quietStartup trims noise from the json event stream. defaultProjectTrust=never because we ship no project-local .pi resources (skills/models live in ~/.pi global) and non-interactive json mode must never block on a trust prompt.",
+  "defaultThinkingLevel": "off",
+  "quietStartup": true,
+  "defaultProjectTrust": "never"
+}

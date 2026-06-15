@@ -58,3 +58,39 @@ func EnsureNamespace(ctx context.Context, cs kubernetes.Interface, name string) 
 	}
 	return false, fmt.Errorf("k8s.EnsureNamespace: create %q: %w", name, err)
 }
+
+// EnsureSecret creates or updates the named secret in the namespace with the provided key-value data.
+func EnsureSecret(ctx context.Context, cs kubernetes.Interface, namespace, name string, data map[string]string) error {
+	if cs == nil {
+		return fmt.Errorf("k8s.EnsureSecret: nil clientset")
+	}
+	if namespace == "" {
+		return fmt.Errorf("k8s.EnsureSecret: empty namespace")
+	}
+	if name == "" {
+		return fmt.Errorf("k8s.EnsureSecret: empty name")
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    NamespaceLabels,
+		},
+		StringData: data,
+		Type:       corev1.SecretTypeOpaque,
+	}
+
+	_, err := cs.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err == nil {
+		return nil
+	}
+	if apierrors.IsAlreadyExists(err) {
+		_, err = cs.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("k8s.EnsureSecret: update %s/%s: %w", namespace, name, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("k8s.EnsureSecret: create %s/%s: %w", namespace, name, err)
+}

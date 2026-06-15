@@ -66,6 +66,19 @@ type RuntimeConfig struct {
 	// rewrites one Gen-1 genome's hint with a fresh snippet. Off by
 	// default for demo determinism.
 	EnableCVESeed bool
+	// ExpectedFlag, when set, is the ground-truth FLAG{...} the target
+	// serves. It is the authoritative success signal for benchmark training:
+	// any pod result whose evidence/raw output contains this exact string is
+	// scored as a confirmed BREACH (fitness 1.0), independent of the keyword
+	// heuristic. The flag is NEVER injected into the attacker pods — they must
+	// actually capture it. Empty means "no ground-truth flag" (normal demo
+	// mode), and scoring falls back to pure keyword fitness.
+	ExpectedFlag string
+	// SkipDNSCheck bypasses the startup DNS resolution of TargetURL. Required
+	// when the target is an in-cluster DNS name (*.svc.cluster.local) that the
+	// out-of-cluster control-plane host cannot resolve but the attacker pods
+	// (running inside the cluster) can.
+	SkipDNSCheck bool
 }
 
 // ParseRunFlags parses the flags accepted by `openzerg run`. The supplied
@@ -89,17 +102,22 @@ func ParseRunFlags(args []string, out io.Writer) (RuntimeConfig, error) {
 	fs.StringVar(&cfg.KubeconfigPath, "kubeconfig", cfg.KubeconfigPath, "kubeconfig path (env KUBECONFIG)")
 	fs.BoolVar(&cfg.DisableNimble, "disable-nimble", cfg.DisableNimble, "kill-switch: omit NIMBLE_API_KEY from pods and disable the in-pod nimble_fetch wrapper")
 	fs.BoolVar(&cfg.EnableCVESeed, "enable-cve-seed", cfg.EnableCVESeed, "use Nimble /v1/search at startup to seed one Gen-1 genome hint with a fresh CVE snippet")
+	fs.StringVar(&cfg.ExpectedFlag, "expected-flag", cfg.ExpectedFlag, "ground-truth FLAG{...} the target serves; any pod whose output contains it is a confirmed BREACH (benchmark training, env EXPECTED_FLAG)")
+	fs.BoolVar(&cfg.SkipDNSCheck, "no-dns-check", cfg.SkipDNSCheck, "skip startup DNS resolution of --target (needed for in-cluster *.svc.cluster.local targets)")
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
 	}
-if cfg.TargetURL == "" {
-        return cfg, fmt.Errorf("--target (or env TARGET_URL) is required")
-    }
-    // Verify DNS resolution for the target URL
-    if err := ResolveTargetDNS(cfg.TargetURL); err != nil {
-        return cfg, fmt.Errorf("target DNS check failed: %w", err)
-    }
+	if cfg.TargetURL == "" {
+		return cfg, fmt.Errorf("--target (or env TARGET_URL) is required")
+	}
+	// Verify DNS resolution for the target URL, unless explicitly skipped
+	// (in-cluster targets are not resolvable from the control-plane host).
+	if !cfg.SkipDNSCheck {
+		if err := ResolveTargetDNS(cfg.TargetURL); err != nil {
+			return cfg, fmt.Errorf("target DNS check failed: %w", err)
+		}
+	}
 	return cfg, nil
 }
 
@@ -121,6 +139,8 @@ func defaultRuntime() RuntimeConfig {
 		KubeconfigPath: ResolveKubeconfigPath(),
 		DisableNimble:  getenvBool("OPENZERG_DISABLE_NIMBLE", false),
 		EnableCVESeed:  getenvBool("OPENZERG_ENABLE_CVE_SEED", false),
+		ExpectedFlag:   getenv("EXPECTED_FLAG", ""),
+		SkipDNSCheck:   getenvBool("OPENZERG_NO_DNS_CHECK", false),
 	}
 	return cfg
 }

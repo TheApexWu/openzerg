@@ -28,12 +28,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # --- config (overridable) ----------------------------------------------------
-# TARGET="${TARGET:-https://docker-image-production-c431.up.railway.app/}"
-TARGET="${TARGET:-https://www.openrouter.ai/}"
-POPULATION="${POPULATION:-6}"
+TARGET="${TARGET:-https://docker-image-production-c431.up.railway.app/}"
+# TARGET="${TARGET:-https://ginandjuice.shop/}"
+POPULATION="${POPULATION:-10}"
 GENERATIONS="${GENERATIONS:-5}"
 OUT_DIR="${OUT_DIR:-./out}"
-KUBECONFIG_PATH="${KUBECONFIG:-$REPO_ROOT/k8s-1-36-0-do-0-syd1-1779919826992-kubeconfig.yaml}"
+KUBECONFIG_PATH="${KUBECONFIG:-$REPO_ROOT/k8s-1-36-0-do-0-ams3-1780491665629-kubeconfig.yaml}"
 BIN="${BIN:-$REPO_ROOT/backend/bin/openzerg}"
 
 # --- pre-flight --------------------------------------------------------------
