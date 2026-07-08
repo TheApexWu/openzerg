@@ -46,11 +46,12 @@ dist/
 npm-debug.log*
 
 # Go build artifacts and run outputs
-./out/
-./bin/
+/bin/
+out/openzerg
 backend/bin/
 backend/out/
 *.exe
+logs.txt
 
 # API keys stored locally — never commit
 hidden-apikeys/

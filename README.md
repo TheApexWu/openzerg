@@ -107,6 +107,20 @@ out/                     run summaries (gitignored except sample)
 OpenZerg only attacks `--target`. The bundled demo targets an OWASP Juice
 Shop instance we operate. Do not point it at anything you don't own.
 
-## Status
+## Credits
 
-See `ralph-logs/STATE.md` for milestone state.
+A hackathon project (May–June 2026), built by three people:
+
+- **Alex Wu** ([@TheApexWu](https://github.com/TheApexWu)) — concept and initial
+  architecture: the evolutionary red-team design, the 18-vector attack registry with
+  per-vector genome parameters, the first evolution/fitness controller, and the
+  attack-script catalog (injection, privilege-escalation, secrets, container-escape,
+  and resource-exhaustion vectors). The control plane was later rebuilt in Go on top of
+  this design.
+- **Carson Weeks** ([@CheatCodeSam](https://github.com/CheatCodeSam)) — the Go control
+  plane the current backend runs on: Kubernetes orchestration via `client-go`, the swarm
+  lifecycle, and the PI / OpenRouter / Nimble integration.
+- **James Burke** ([@lifesized](https://github.com/lifesized)) — the live swarm
+  visualization: the containment-map UI, the SSE event pipeline, and the replay narrative.
+
+*Prototype from a hackathon — not maintained as a product.*
